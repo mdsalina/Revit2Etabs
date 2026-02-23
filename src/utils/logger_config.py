@@ -1,0 +1,35 @@
+import logging
+import os
+from datetime import datetime
+
+def setup_logger():
+    # Creamos carpeta de logs si no existe
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Nombre del archivo con fecha para no sobreescribir pruebas anteriores
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_dir, f"revit2etabs_{timestamp}.log")
+    
+    # Configuración del logger
+    logger = logging.getLogger("Revit2Etabs")
+    logger.setLevel(logging.DEBUG)  # Capturamos todo, luego filtramos por handler
+
+    # 1. Handler para Consola (Mensajes limpios para el usuario)
+    c_handler = logging.StreamHandler()
+    c_handler.setLevel(logging.INFO)
+    c_format = logging.Formatter('%(levelname)s - %(message)s')
+    c_handler.setFormatter(c_format)
+
+    # 2. Handler para Archivo (Detalle técnico completo para depuración)
+    f_handler = logging.FileHandler(log_file)
+    f_handler.setLevel(logging.DEBUG)
+    f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    f_handler.setFormatter(f_format)
+
+    # Agregamos los handlers al logger
+    logger.addHandler(c_handler)
+    logger.addHandler(f_handler)
+
+    return logger
