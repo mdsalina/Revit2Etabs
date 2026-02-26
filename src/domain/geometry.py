@@ -57,3 +57,28 @@ class NodeManager:
         self.nodes = temp_manager.nodes
         self.tolerance = new_tolerance
         return old_to_new_mapping
+
+    # En src/domain/geometry.py
+
+    def reindex(self, tolerance=None):
+        """
+        Limpia el diccionario y lo reconstruye con las posiciones actuales.
+        Fusiona nodos que ahora ocupan la misma posición.
+        """
+        if tolerance: self.tolerance = tolerance
+        
+        new_nodes_dict = {}
+        mapping = {} # Para actualizar las referencias si es necesario
+    
+        for old_node in list(self.nodes.values()):
+            key = self._generate_key(old_node.x, old_node.y, old_node.z)
+            
+            if key not in new_nodes_dict:
+                new_nodes_dict[key] = old_node
+            else:
+                # Si ya hay un nodo en esa posición, registramos que 
+                # este 'old_node' debe ser reemplazado por el que ya existe
+                mapping[old_node.id] = new_nodes_dict[key]
+                
+        self.nodes = new_nodes_dict
+        return mapping

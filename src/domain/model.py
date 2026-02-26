@@ -1,11 +1,18 @@
 from .geometry import NodeManager
+from .elements.frame import FrameElement
+from .elements.shell import ShellElement
+from services.wall_processor import WallProcessor
+from services.slab_processor import SlabProcessor
+
 
 class Model:
     def __init__(self, name="Nuevo Modelo Structural"):
         self.name = name
         # El manager de nodos vive dentro del modelo
         self.node_manager = NodeManager(tolerance=0.005) # 5mm por defecto
-        
+        self.wall_processor = WallProcessor(self)
+        self.slab_processor = SlabProcessor(self)
+
         # Colecciones de elementos
         self.stories = []
         self.materials = {}
@@ -20,31 +27,77 @@ class Model:
         # Sistema de grillas (se generará en el pipeline)
         self.grids = []
 
-    def add_beam(self, id_revit, p1, p2, section_name):
+    def add_beam(self, revit_id, section, material, level, p1, p2):
         """
-        Método de alto nivel para agregar una viga.
-        p1 y p2 son tuplas (x, y, z) que vienen de Revit.
+        Crea una instancia de FrameElement. p1 y p2 son tuplas (x, y, z).
         """
-        # El modelo le pide al manager los objetos nodo reales
-        node_start = self.node_manager.get_or_create_node(*p1)
-        node_end = self.node_manager.get_or_create_node(*p2)
+        # El modelo le pide al manager los objetos nodo reales. Si no existe los crea si entrega el elemento especifico
+        n1 = self.node_manager.get_or_create_node(*p1)
+        n2 = self.node_manager.get_or_create_node(*p2)
         
-        # Aquí crearías la instancia de Beam (importada de elements.frame)
-        # Por ahora, simulamos la creación
-        new_beam = {"revit_id": id_revit, "start_node": node_start, "end_node": node_end, "section": section_name}
-        self.beams.append(new_beam)
-        return new_beam
+        beam = FrameElement(revit_id, section, material, level, n1, n2)
+        self.beams.append(beam)
+        return beam
 
-    def add_column(self, id_revit, p1, p2, section_name):
-        """
-        Método de alto nivel para agregar una columna.
-        """
-        node_start = self.node_manager.get_or_create_node(*p1)
-        node_end = self.node_manager.get_or_create_node(*p2)
+    def add_column(self, revit_id, section, material, level, p1, p2):
+        """Crea una columna como FrameElement."""
+
+        n1 = self.node_manager.get_or_create_node(*p1)
+        n2 = self.node_manager.get_or_create_node(*p2)
         
-        new_column = {"revit_id": id_revit, "start_node": node_start, "end_node": node_end, "section": section_name}
-        self.columns.append(new_column)
-        return new_column
+        col = FrameElement(revit_id, section, material, level, n1, n2)
+        self.columns.append(col)
+        return col
+
+    def add_wall(self, revit_id, exterior_pts, holes_pts, section, material, level, height):
+        """
+        Recibe la data cruda, la procesa a través del WallProcessor 
+        y agrega los sub-elementos resultantes al modelo.
+        """
+        # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
+        temp_wall = ShellElement(revit_id, section, material, level, [])
+        temp_wall.exterior_points = exterior_pts
+        temp_wall.holes_points = holes_pts
+        temp_wall.total_height = height
+
+        # 2. El procesador descompone el muro en rectángulos analíticos
+        # Importante: El WallProcessor usará internamente model.node_manager
+        new_elements = self.wall_processor.process_element(temp_wall)
+
+        # 3. Clasificamos y guardamos los resultados
+        for elem in new_elements:
+            if isinstance(elem, ShellElement):
+                self.walls.append(elem)
+            elif isinstance(elem, FrameElement):
+                self.beams.append(elem)
+        
+        return new_elements
+    
+    def add_slab(self, revit_id, exterior_pts, holes_pts, section, material, level, height):
+        """
+        Recibe la data cruda, la procesa a través del WallProcessor 
+        y agrega los sub-elementos resultantes al modelo.
+        """
+        # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
+        temp_slab = ShellElement(revit_id, section, material, level, [])
+        temp_slab.exterior_points = exterior_pts
+        temp_slab.holes_points = holes_pts
+        maxz=max(node[2] for node in temp_slab.exterior_points)
+        minz=min(node[2] for node in temp_slab.exterior_points)
+        maxz_hole=max(node[2] for node in temp_slab.holes_points)
+        minz_hole=min(node[2] for node in temp_slab.holes_points)
+        # 2. El procesador descompone la losa en rectángulos analíticos
+        # Importante: El WallProcessor usará internamente model.node_manager
+        if abs(maxz-minz)<0.01 or abs(maxz_hole-minz_hole)<0.01:
+            new_elements = self.slab_processor.process_element(temp_slab)
+            for elem in new_elements:
+                self.slabs.append(elem)
+            return new_elements
+        else:
+            print("La losa no es completament horizontal, se descarta")
+
+        # 3. Clasificamos y guardamos los resultados
+
 
     def get_summary(self):
         """Utilidad para ver qué tenemos cargado"""
@@ -53,5 +106,6 @@ class Model:
             "vigas": len(self.beams),
             "columnas": len(self.columns),
             "muros": len(self.walls),
+            "losas": len(self.slabs),
             "pisos": len(self.stories)
         }

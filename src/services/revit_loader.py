@@ -1,8 +1,7 @@
 import json
 from pathlib import Path
-from .wall_processor import WallProcessor
-from domain.elements.shell import ShellElement
 import logging
+
 logger = logging.getLogger("Revit2Etabs")
 
 class RevitLoader:
@@ -11,7 +10,6 @@ class RevitLoader:
         Recibe una instancia de la clase Model para poblarla.
         """
         self.model = model
-        self.wall_processor = WallProcessor(model)
 
     def load_json(self, file_path):
         """
@@ -39,6 +37,7 @@ class RevitLoader:
             self._parse_frames(elements.get('beams', []), "Beam")
             self._parse_frames(elements.get('columns', []), "Column")
             self._parse_walls(elements.get('walls', []))
+            self._parse_slabs(elements.get('slabs', []))
 
             logger.info("Carga de niveles completada.")
         except Exception as e:
@@ -55,54 +54,41 @@ class RevitLoader:
             name = sec['code_name']
             self.model.sections[name] = sec
 
-    def _parse_frames(self, frames_data, type_label):
+    def _parse_frames(self, frames_data, category):
         for item in frames_data:
-            # Extraemos geometría
-            # El JSON estructurado previamente facilita esto
-            p1 = tuple(item['location']['start'])
-            p2 = tuple(item['location']['end'])
-            
-            # Usamos el método de alto nivel del modelo que ya definimos
-            if type_label == "Beam":
-                self.model.add_beam(
-                    id_revit=item['revit_id'],
-                    p1=p1,
-                    p2=p2,
-                    section_name=item['section']
-                )
-            elif type_label == "Column":
-                self.model.add_column(
-                    id_revit=item['revit_id'],
-                    p1=p1,
-                    p2=p2,
-                    section_name=item['section']
-                )
+            params = {
+                "revit_id": item['revit_id'],
+                "p1": tuple(item['location']['start']),
+                "p2": tuple(item['location']['end']),
+                "section": item['section'],
+                "material": item.get('material', 'Generic'),
+                "level": item['level']
+            }
+            if category == "Beam":
+                self.model.add_beam(**params)
+            else:
+                self.model.add_column(**params)
 
     def _parse_walls(self, walls_data):
-        """
-        Lee los muros del JSON y los procesa antes de añadirlos al modelo.
-        """
-        for w_data in walls_data:
-            # 1. Creamos un objeto temporal de muro con la data cruda de Revit
-            temp_wall = ShellElement(
-                revit_id=w_data['revit_id'],
-                section=w_data['section'],
-                material=w_data['material'],
-                level=w_data['level'],
-                nodes=[] # No necesitamos nodos reales aún, solo la geometría
+        for w in walls_data:
+            self.model.add_wall(
+                revit_id=w['revit_id'],
+                exterior_pts=w['location']['outline'],
+                holes_pts=w['location'].get('openings', []),
+                section=w['section'],
+                material=w['material'],
+                level=w['level'],
+                height=w['location'].get('height', 3.0)
             )
-            # Pasamos la data de puntos (3D) al objeto temporal
-            temp_wall.exterior_points = w_data['location']['outline']
-            temp_wall.holes_points = w_data['location'].get('openings', [])
-            temp_wall.total_height = w_data['location'].get('height', 3.0)
-
-            # 2. Llamamos al procesador para subdividir el muro
-            logger.info(f"Procesando aberturas para muro Revit ID: {temp_wall.revit_id}...")
-            new_elements = self.wall_processor.process_wall(temp_wall)
-
-            # 3. Guardamos los resultados en las colecciones del modelo
-            for elem in new_elements:
-                if isinstance(elem, ShellElement):
-                    self.model.walls.append(elem)
-                else:
-                    self.model.beams.append(elem)
+    
+    def _parse_slabs(self, slabs_data):
+        for s in slabs_data:
+            self.model.add_slab(
+                revit_id=s['revit_id'],
+                exterior_pts=s['location']['outline'],
+                holes_pts=s['location'].get('openings', []),
+                section=s['section'],
+                material=s['material'],
+                level=s['level'],
+                height=s['location'].get('height', 3.0)
+            )
