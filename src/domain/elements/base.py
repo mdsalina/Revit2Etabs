@@ -31,5 +31,6 @@ class StructuralElement(ABC):
         traducirse a la API de ETABS.
         """
         pass
+    
     def __repr__(self):
         return f"<{self.__class__.__name__} ID:{self.revit_id} Sec:{self.section}>"

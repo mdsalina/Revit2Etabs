@@ -6,30 +6,36 @@ import numpy as np
 class StructuralVisualizer:
     def __init__(self, model):
         self.model = model
+        self.fig = None
+        self.ax = None
+        self.annot = None
+        self.scatter = None
 
-    def plot_model(self, show_nodes=False):
-        """Genera una vista 3D de la estructura actual en memoria."""
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
+    def plot_model(self, show_nodes=False, show_grids=False):
+        """Genera una vista 3D interactiva de la estructura."""
+        self.fig = plt.figure(figsize=(12, 9))
+        self.ax = self.fig.add_subplot(111, projection='3d')
         
-        # 1. Graficar Frames (Vigas y Columnas)
-        self._plot_frames(ax)
+        self._plot_frames(self.ax)
+        self._plot_shells(self.ax)
         
-        # 2. Graficar Shells (Muros)
-        self._plot_shells(ax)
+        # Nueva funcionalidad para visualizar grillas
+        if show_grids:
+            self._plot_grids(self.ax)
         
-        # 3. Graficar Nodos (Opcional)
         if show_nodes:
-            self._plot_nodes(ax)
+            self._plot_nodes(self.ax)
+            self.annot = self.ax.text(0, 0, 0, "", color='white', 
+                                      bbox=dict(boxstyle="round", fc="black", ec="b", alpha=0.7))
+            self.annot.set_visible(False)
+            self.fig.canvas.mpl_connect('pick_event', self._on_pick)
 
-        ax.set_xlabel('X (m)')
-        ax.set_ylabel('Y (m)')
-        ax.set_zlabel('Z (m)')
-        ax.set_title(f'Vista Previa: {self.model.name}')
+        self.ax.set_xlabel('X (m)')
+        self.ax.set_ylabel('Y (m)')
+        self.ax.set_zlabel('Z (m)')
+        self.ax.set_title(f'Vista Previa Interactiva: {self.model.name}')
         
-        # Ajuste de escala proporcional (importante en ingeniería)
-        self._set_axes_equal(ax)
-        
+        self._set_axes_equal(self.ax)
         plt.show()
 
     def _plot_frames(self, ax):
@@ -58,12 +64,46 @@ class StructuralVisualizer:
             poly = Poly3DCollection([verts], alpha=0.3, facecolor='cyan', edgecolor='darkblue')
             ax.add_collection3d(poly)
 
-    def _plot_nodes(self, ax):
+    def _plot_nodes(self, ax, plot_id=True):
         nodes = list(self.model.node_manager.nodes.values())
+        self.node_list = nodes # Guardar referencia para identificar por índice
+        
         x = [n.x for n in nodes]
         y = [n.y for n in nodes]
         z = [n.z for n in nodes]
-        ax.scatter(x, y, z, color='black', s=10)
+        ids = [n.id for n in nodes]
+        
+        # Habilitar 'picker' para permitir interacción
+        #agregu una leyenda para identificar los nodos
+        if plot_id:
+            for i, txt in enumerate(ids):
+                ax.text(x[i], y[i], z[i], str(txt), color='darkred', fontsize=8, ha='center', va='bottom')
+
+        self.scatter = ax.scatter(x, y, z, color='black', s=20, picker=True, pickradius=5)
+
+    def _plot_grids(self, ax):
+        """Dibuja los sistemas de grillas en el plano Z=0."""
+        # 1. Obtener límites para calcular extremos de grilla
+        nodes = list(self.model.node_manager.nodes.values())
+        if not nodes: return
+        
+        bbox = (
+            min(n.x for n in nodes), max(n.x for n in nodes),
+            min(n.y for n in nodes), max(n.y for n in nodes)
+        )
+
+        for system in self.model.grid_systems:
+            for grid in system.grids:
+                # Obtenemos los extremos cartesianos desde la Normal de Hesse
+                p1, p2 = grid.get_endpoints(bbox)
+                
+                # Dibujar línea (en Z=0 por defecto)
+                ax.plot([p1[0], p2[0]], [p1[1], p2[1]], [0, 0], 
+                        color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+                
+                # Colocar etiqueta en los extremos
+                ax.text(p1[0], p1[1], 0, f" {grid.label}", color='gray', fontsize=7, fontweight='bold')
+                ax.text(p2[0], p2[1], 0, f"{grid.label} ", color='gray', fontsize=7, fontweight='bold', ha='right')
 
     def _set_axes_equal(self, ax):
         """Ajusta los límites para que 1m en X sea igual a 1m en Y y Z."""
@@ -80,3 +120,26 @@ class StructuralVisualizer:
         ax.set_xlim3d([np.mean(x_limits) - plot_radius, np.mean(x_limits) + plot_radius])
         ax.set_ylim3d([np.mean(y_limits) - plot_radius, np.mean(y_limits) + plot_radius])
         ax.set_zlim3d([np.mean(z_limits) - plot_radius, np.mean(z_limits) + plot_radius])
+    
+    def _on_pick(self, event):
+        """Manejador de evento cuando se hace clic en un punto del scatter."""
+        if event.artist != self.scatter:
+            return
+
+        # Obtener el índice del punto clickeado
+        ind = event.ind[0]
+        node = self.node_list[ind]
+        
+        # Actualizar posición y texto de la anotación
+        #ajusro para que el texto salga horizontal y no vertical en el grafico
+        #el texto sale vertical porque el eje z esta en vertical
+        #para que salga horizontal necesito rotar el texto
+        self.annot.set_position((node.x, node.y))
+        self.annot.set_3d_properties(node.z, 'z') # Necesario para Matplotlib 3D
+        self.annot.set_text(f"ID: {node.id}\nX: {node.x:.2f}\nY: {node.y:.2f}\nZ: {node.z:.2f}")
+        self.annot.set_visible(True)
+        
+        self.fig.canvas.draw_idle()
+        print(f"Nodo {node.id} Seleccionado - X: {node.x:.4f}, Y: {node.y:.4f}, Z: {node.z:.4f}")
+    
+    

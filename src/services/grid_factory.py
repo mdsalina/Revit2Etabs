@@ -110,10 +110,68 @@ class GridFactory:
         db = DBSCAN(eps=eps, min_samples=1).fit(X)
         return [np.median(X[db.labels_ == l]) for l in set(db.labels_)]
 
-    def snap_nodes(self, max_distance=0.1):
+    def snap_nodes(self, max_distance=0.10):
         """
-        Punto E/F: Mueve cada nodo a la intersección de grillas más cercana.
+        Punto E/F: Desplaza los nodos del modelo hacia las intersecciones de las
+        grillas maestras más influyentes.
+        max_distance: Tolerancia en metros para considerar que un nodo pertenece a una grilla.
         """
-        # Aquí iría la lógica de intersección de líneas 
-        # para cada nodo basado en sus grillas asociadas.
-        pass
+        nodes_moved = 0
+        
+        # Iteramos sobre los objetos Node reales del NodeManager
+        for node in self.model.node_manager.nodes.values():
+            associated_grids = []
+            
+            # 1. Identificar qué grillas maestras 'reclaman' a este nodo
+            for ang, rhos in self.master_grids.items():
+                rho_node = self._calculate_rho(node.x, node.y, ang)
+                
+                # Buscamos el rho maestro más cercano para este ángulo
+                closest_rho = min(rhos, key=lambda r: abs(r - rho_node))
+                
+                # Verificamos si está dentro del umbral (ej. 10 cm)
+                if abs(closest_rho - rho_node) <= max_distance:
+                    associated_grids.append((ang, closest_rho))
+                    #print(f"Nodo {node.id}, coordenadas ({node.x},{node.y}) asociado a grilla {ang} con rho {closest_rho}, distancia {abs(closest_rho - rho_node)}")
+
+
+            # 2. Si el nodo está en la intersección de al menos 2 grillas maestras
+            if len(associated_grids) >= 2:
+                # Ordenamos por cercanía para usar las 2 grillas más 'fuertes'
+                associated_grids.sort(key=lambda g: abs(g[1] - self._calculate_rho(node.x, node.y, g[0])))
+                
+                # Resolvemos la intersección de las dos mejores candidatas
+                new_x, new_y = self._intersect_lines(associated_grids[0], associated_grids[1])
+                
+                if new_x is not None:
+                    node.x, node.y = new_x, new_y
+                    nodes_moved += 1
+
+        logger.info(f"Snap completado: {nodes_moved} nodos ajustados a la grilla maestra.")
+
+    def _intersect_lines(self, g1, g2):
+        """
+        Resuelve el sistema de ecuaciones para dos líneas en forma normal:
+        x*cos(theta) + y*sin(theta) = rho
+        """
+        ang1, rho1 = g1
+        ang2, rho2 = g2
+        
+        # El ángulo de la normal debe coincidir con la forma en que se calculó rho
+        theta1 = np.radians((ang1 + 90) % 180)
+        theta2 = np.radians((ang2 + 90) % 180)
+        
+        # Matriz de coeficientes A y vector de resultados b
+        A = np.array([
+            [np.cos(theta1), np.sin(theta1)],
+            [np.cos(theta2), np.sin(theta2)]
+        ])
+        b = np.array([rho1, rho2])
+        
+        try:
+            # Resolvemos el sistema: A * [x, y]^T = b
+            point = np.linalg.solve(A, b)
+            return point[0], point[1]
+        except np.linalg.LinAlgError:
+            # Las líneas son paralelas (determinante cero)
+            return None, None

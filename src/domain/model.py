@@ -3,6 +3,8 @@ from .elements.frame import FrameElement
 from .elements.wall import WallElement
 from services.wall_processor import WallProcessor
 from services.slab_processor import SlabProcessor
+import numpy as np
+
 
 
 class Model:
@@ -26,7 +28,8 @@ class Model:
         self.slabs = []
         
         # Sistema de grillas (se generará en el pipeline)
-        self.grids = []
+        self.grid_systems = []
+ 
 
     def add_beam(self, revit_id, section, material, level, p1, p2):
         """
@@ -109,3 +112,41 @@ class Model:
             "losas": len(self.slabs),
             "pisos": len(self.stories)
         }
+    
+    def get_nodes_summary(self,all=False):
+        """Devuelve un resumen estadístico de las coordenadas de los nodos"""
+        if not self.node_manager.nodes:
+            return "No hay nodos en el modelo."
+
+        coords = np.array([[n.x, n.y, n.z] for n in self.node_manager.nodes.values()])
+        
+        summary = {
+            "total_nodos": len(coords),
+            "x": {
+                "min": float(np.min(coords[:, 0])),
+                "max": float(np.max(coords[:, 0])),
+                "mean": float(np.mean(coords[:, 0])),
+                "std": float(np.std(coords[:, 0]))
+            },
+            "y": {
+                "min": float(np.min(coords[:, 1])),
+                "max": float(np.max(coords[:, 1])),
+                "mean": float(np.mean(coords[:, 1])),
+                "std": float(np.std(coords[:, 1]))
+            },
+            "z": {
+                "min": float(np.min(coords[:, 2])),
+                "max": float(np.max(coords[:, 2])),
+                "mean": float(np.mean(coords[:, 2])),
+                "std": float(np.std(coords[:, 2]))
+            }
+        }
+
+        if all:
+            import pandas as pd
+            #convierto coords en un dataframe de pandas
+            df = pd.DataFrame(coords, columns=["x", "y", "z"])
+            summary = df
+
+        return summary
+   
