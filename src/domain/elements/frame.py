@@ -12,7 +12,11 @@ class FrameElement(StructuralElement):
         dy = self.end_node.y - self.start_node.y
         return round(math.degrees(math.atan2(dy, dx))%180, 0)
 
-
+    def get_length(self):
+        dx = self.end_node.x - self.start_node.x
+        dy = self.end_node.y - self.start_node.y
+        return math.sqrt(dx**2 + dy**2)
+     
     def get_geometry_summary(self):
         return f"Línea de {self.start_node.id} a {self.end_node.id}"
 

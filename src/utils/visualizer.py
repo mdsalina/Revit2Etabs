@@ -33,10 +33,58 @@ class StructuralVisualizer:
         self.ax.set_xlabel('X (m)')
         self.ax.set_ylabel('Y (m)')
         self.ax.set_zlabel('Z (m)')
-        self.ax.set_title(f'Vista Previa Interactiva: {self.model.name}')
+        self.ax.set_title(f'Vista Previa Interactiva: {self.model.name}', pad=20)
         
         self._set_axes_equal(self.ax)
+        
+        # Ajustar los márgenes para que el box 3D ocupe más espacio en la ventana
+        self.fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.95)
+        
+        # Conectar evento de scroll para zoom
+        self.fig.canvas.mpl_connect('scroll_event', self._on_scroll)
+        
+        # Agregar leyenda manejando el clipping
+        handles, labels = self.ax.get_legend_handles_labels()
+        if handles:
+            # bbox_to_anchor fuera del gráfico para evitar solapamiento
+            self.ax.legend(handles, labels, loc='upper left', bbox_to_anchor=(0.0, 1.05))
+
         plt.show()
+
+    def _on_scroll(self, event):
+        """Manejador para hacer zoom in/out con la rueda del ratón."""
+        if event.inaxes != self.ax: return
+        
+        base_scale = 1.15
+        
+        # Determinar si acercar o alejar (scroll up = alejar, scroll down = acercar en matplotlib usualmente, pero lo ajustaremos p/ comodidad)
+        if event.button == 'up':
+            scale_factor = 1 / base_scale
+        elif event.button == 'down':
+            scale_factor = base_scale
+        else:
+            scale_factor = 1
+
+        # Obtener límites actuales
+        x_lim = self.ax.get_xlim3d()
+        y_lim = self.ax.get_ylim3d()
+        z_lim = self.ax.get_zlim3d()
+        
+        # Obtener el centro actual
+        x_center = sum(x_lim) / 2
+        y_center = sum(y_lim) / 2
+        z_center = sum(z_lim) / 2
+        
+        # Calcular nuevos límites escalando desde el centro
+        new_x_radius = (x_lim[1] - x_center) * scale_factor
+        new_y_radius = (y_lim[1] - y_center) * scale_factor
+        new_z_radius = (z_lim[1] - z_center) * scale_factor
+        
+        self.ax.set_xlim3d([x_center - new_x_radius, x_center + new_x_radius])
+        self.ax.set_ylim3d([y_center - new_y_radius, y_center + new_y_radius])
+        self.ax.set_zlim3d([z_center - new_z_radius, z_center + new_z_radius])
+        
+        self.fig.canvas.draw_idle()
 
     def _plot_frames(self, ax):
         for beam in self.model.beams:

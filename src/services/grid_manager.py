@@ -3,7 +3,7 @@ import logging
 from domain.grid import GridLine
 from domain.grid_system import GridSystem
 
-logger = logging.getLogger("Revit2Etabs")
+logger = logging.getLogger("Revit2Etabs.Service.GridManager")
 
 class GridManager:
     def __init__(self, model):

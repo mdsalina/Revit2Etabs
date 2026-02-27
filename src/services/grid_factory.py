@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 import logging
 
-logger = logging.getLogger("Revit2Etabs")
+logger = logging.getLogger("Revit2Etabs.Service.GridFactory")
 
 class GridFactory:
     def __init__(self, model):
@@ -24,7 +24,6 @@ class GridFactory:
         if not elements: return []
 
         raw_angles = [e.get_angle() for e in elements]
-        logger.info(f"Ángulos detectados: {raw_angles}")
         X = np.radians(np.array(raw_angles).reshape(-1, 1))
         
         db = DBSCAN(eps=np.radians(eps_deg), min_samples=1).fit(X)
@@ -52,7 +51,6 @@ class GridFactory:
         self.master_angles = sorted(list(set(found_masters)))
         logger.info(f"Ángulos maestros detectados: {self.master_angles}")
         return self.master_angles
-
 
     def generate_grids(self, eps_deg=2.0,eps_dist=0.1,round_decimal=2,canonical_angles=None,snap_threshold=2.5):
         """Genera el andamiaje de grillas usando los ángulos maestros.
@@ -97,8 +95,6 @@ class GridFactory:
         for ang, rho_list in candidates.items():
             if not rho_list: continue
             self.master_grids[ang] = sorted([round(x,round_decimal) for x in self._cluster_rhos(rho_list, eps_dist)])
-        
-        logger.info(f"Grillas generadas: {self.master_grids}")
 
     def _calculate_rho(self, x, y, angle_deg):
         # La normal está a +90 grados de la línea
@@ -175,3 +171,5 @@ class GridFactory:
         except np.linalg.LinAlgError:
             # Las líneas son paralelas (determinante cero)
             return None, None
+
+            

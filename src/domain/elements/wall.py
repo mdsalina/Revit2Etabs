@@ -57,3 +57,8 @@ class WallElement(StructuralElement):
             dy = n2.y - n1.y
         
         return round(math.degrees(math.atan2(dy, dx))%180, 0)
+
+    def get_length(self):
+        dx = self.end_node.x - self.start_node.x
+        dy = self.end_node.y - self.start_node.y
+        return math.sqrt(dx**2 + dy**2)

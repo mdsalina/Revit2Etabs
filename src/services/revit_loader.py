@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import logging
 
-logger = logging.getLogger("Revit2Etabs")
+logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 
 class RevitLoader:
     UNIT_FACTORS = {
@@ -31,7 +31,7 @@ class RevitLoader:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        logger.info(f"--- Cargando modelo: {data.get('project_info', {}).get('name', 'S/N')} ---")
+        logger.info(f"Nombre del modelo: {data.get('project_info', {}).get('name', 'S/N')}")
         
         try:
             # 1. Cargar metadatos y niveles
@@ -62,7 +62,7 @@ class RevitLoader:
         self.model.name = project_info.get('name', 'S/N')
         self.model.internal_unit = "m" # El modelo siempre habla en metros
         
-        logger.info(f"Unidades del JSON: {unit_key}. Factor de normalización: {self.factor}")
+        logger.info(f"Unidades del modelo: {unit_key}. Factor de normalización: {self.factor}")
 
     def _apply_unit(self, value):
         """
