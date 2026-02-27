@@ -1,12 +1,12 @@
 from .BaseShellProcessor import BaseShellProcessor
-from domain.elements.shell import ShellElement
+from domain.elements.wall import WallElement
 from domain.elements.frame import FrameElement
 
 class WallProcessor(BaseShellProcessor):
     def _create_structural_element(self, rect_poly, parent_wall):
         """
         Analiza el rectángulo 2D, lo convierte a 3D y decide 
-        si crear un ShellElement (Muro) o un FrameElement (Viga).
+        si crear un WallElement (Muro) o un FrameElement (Viga).
         """
         # --- A. Conversión a 3D ---
         u_coords, v_coords = rect_poly.exterior.coords.xy
@@ -30,7 +30,7 @@ class WallProcessor(BaseShellProcessor):
         if razonLh>4:
             return self._create_spandrel_frame(rect_poly, parent_wall, nodes_3d)
         else:
-            return ShellElement(
+            return WallElement(
                 revit_id=parent_wall.revit_id,
                 section=parent_wall.section,
                 material=parent_wall.material,

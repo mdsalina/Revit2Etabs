@@ -1,11 +1,12 @@
 from .geometry import NodeManager
 from .elements.frame import FrameElement
-from .elements.shell import ShellElement
+from .elements.wall import WallElement
 from services.wall_processor import WallProcessor
 from services.slab_processor import SlabProcessor
 
 
 class Model:
+    """ al cargar modelo siempre las unidades deben estar en metros"""
     def __init__(self, name="Nuevo Modelo Structural"):
         self.name = name
         # El manager de nodos vive dentro del modelo
@@ -55,7 +56,7 @@ class Model:
         y agrega los sub-elementos resultantes al modelo.
         """
         # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
-        temp_wall = ShellElement(revit_id, section, material, level, [])
+        temp_wall = WallElement(revit_id, section, material, level, [])
         temp_wall.exterior_points = exterior_pts
         temp_wall.holes_points = holes_pts
         temp_wall.total_height = height
@@ -66,20 +67,20 @@ class Model:
 
         # 3. Clasificamos y guardamos los resultados
         for elem in new_elements:
-            if isinstance(elem, ShellElement):
+            if isinstance(elem, WallElement):
                 self.walls.append(elem)
             elif isinstance(elem, FrameElement):
                 self.beams.append(elem)
         
         return new_elements
     
-    def add_slab(self, revit_id, exterior_pts, holes_pts, section, material, level, height):
+    def add_slab(self, revit_id, exterior_pts, holes_pts, section, material, level):
         """
         Recibe la data cruda, la procesa a través del WallProcessor 
         y agrega los sub-elementos resultantes al modelo.
         """
         # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
-        temp_slab = ShellElement(revit_id, section, material, level, [])
+        temp_slab = WallElement(revit_id, section, material, level, [])
         temp_slab.exterior_points = exterior_pts
         temp_slab.holes_points = holes_pts
         maxz=max(node[2] for node in temp_slab.exterior_points)
@@ -97,7 +98,6 @@ class Model:
             print("La losa no es completament horizontal, se descarta")
 
         # 3. Clasificamos y guardamos los resultados
-
 
     def get_summary(self):
         """Utilidad para ver qué tenemos cargado"""

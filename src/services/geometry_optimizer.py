@@ -13,14 +13,14 @@ class GeometryOptimizer:
         """
         Punto A: Agrupa ángulos de vigas y muros y los ajusta a la tendencia del cluster.
         """
-        # 1. Recolectar ángulos de todos los elementos
+        # 1. Recolectar ángulos de todos los elementos que entran en el analisis
         elements = self.model.beams + self.model.walls
         if not elements: return
 
         # Usamos el ángulo en grados (0 a 180 para evitar duplicados por sentido)
         angles = []
         for elem in elements:
-            angles.append(self._get_element_angle(elem))
+            angles.append(elem.get_angle())
         
         X = np.array(angles).reshape(-1, 1)
 
@@ -43,23 +43,10 @@ class GeometryOptimizer:
             target_angle = representative_angles[labels[i]]
             self._apply_angle_snap(elem, target_angle)
 
-    def _get_element_angle(self, elem):
-        """Calcula ángulo 2D de un elemento (viga o muro)."""
-        # Para vigas es directo entre nodos. Para muros usamos el vector u_axis.
-        if hasattr(elem, 'start_node'): # Es una viga/columna
-            dx = elem.end_node.x - elem.start_node.x
-            dy = elem.end_node.y - elem.start_node.y
-        else: # Es un muro (Shell)
-            # Tomamos el primer segmento del contorno como referencia
-            dx = elem.nodes[1].x - elem.nodes[0].x
-            dy = elem.nodes[1].y - elem.nodes[0].y
-        
-        angle = np.degrees(np.arctan2(dy, dx)) % 180
-        return angle
 
     def _apply_angle_snap(self, elem, target_deg):
         """Rota el elemento sobre su primer nodo para coincidir con target_deg."""
-        current_deg = self._get_element_angle(elem)
+        current_deg = elem.get_angle()
         delta_rad = np.radians(target_deg - current_deg)
         
         if abs(delta_rad) < 1e-7: return

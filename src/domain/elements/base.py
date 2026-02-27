@@ -16,14 +16,20 @@ class StructuralElement(ABC):
         pass
 
     #Al usar @abstractmethod, le estás diciendo a Python: "Si alguien crea una clase Beam que hereda de StructuralElement, pero se olvida de escribir el método to_etabs_command, el programa dará un error inmediatamente
+
     @abstractmethod
-    def to_etabs_command(self, sap_model):
+    def get_angle(self,):
         """
-        Este es el método más importante. 
-        Obliga a que cada hijo (Viga, Muro) sepa cómo 
-        traducirse a la API de ETABS.
+        Obliga a que cada hijo (Viga, Muro) sepa cómo obtener su ángulo.
         """
         pass
 
+    @abstractmethod
+    def to_etabs_command(self, sap_model):
+        """
+        Obliga a que cada hijo (Viga, Muro,losa) sepa cómo 
+        traducirse a la API de ETABS.
+        """
+        pass
     def __repr__(self):
         return f"<{self.__class__.__name__} ID:{self.revit_id} Sec:{self.section}>"
