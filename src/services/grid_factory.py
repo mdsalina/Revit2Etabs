@@ -54,8 +54,17 @@ class GridFactory:
         return self.master_angles
 
 
-    def generate_grids(self, eps_deg=2.0,eps_dist=0.05,canonical_angles=None,snap_threshold=2.5):
-        """Genera el andamiaje de grillas usando los ángulos maestros."""
+    def generate_grids(self, eps_deg=2.0,eps_dist=0.1,round_decimal=2,canonical_angles=None,snap_threshold=2.5):
+        """Genera el andamiaje de grillas usando los ángulos maestros.
+        
+        eps_deg: Tolerancia angular para agrupar elementos similares.
+        eps_dist: Tolerancia de distancia para agrupar elementos similares.
+        round_decimal: Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm).
+        canonical_angles: Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,
+                          los ángulos detectados se "pegan" a estos valores.
+        snap_threshold: Distancia angular máxima para que un elemento se considere
+                        parte de un ángulo canónico.
+        """
         # 1. Primero encontramos los ángulos de intención
         self._find_master_angles(eps_deg=eps_deg,canonical_angles=canonical_angles,snap_threshold=snap_threshold)
         
@@ -87,7 +96,7 @@ class GridFactory:
         # 2. Consolidar rhos por cada ángulo
         for ang, rho_list in candidates.items():
             if not rho_list: continue
-            self.master_grids[ang] = sorted([round(x,2) for x in self._cluster_rhos(rho_list, eps_dist)])
+            self.master_grids[ang] = sorted([round(x,round_decimal) for x in self._cluster_rhos(rho_list, eps_dist)])
         
         logger.info(f"Grillas generadas: {self.master_grids}")
 

@@ -64,6 +64,7 @@ class NodeManager:
         """
         Limpia el diccionario y lo reconstruye con las posiciones actuales.
         Fusiona nodos que ahora ocupan la misma posición.
+        tolerance: Tolerancia de distancia para agrupar nodos similares.
         """
         if tolerance: self.tolerance = tolerance
         

@@ -11,6 +11,12 @@ from services.grid_factory import GridFactory
 logger = setup_logger()
 
 test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','test_angle']
+EPS_ANGLE=2.0 # Tolerancia angular para agrupar elementos similares
+EPS_DIST=0.1 # Tolerancia de distancia para agrupar elementos similares
+ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
+SNAP_THRESHOLD=2.5 # Distancia angular máxima para que un elemento se considere parte de un ángulo canónico
+CANONICAL_ANGLES=None # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
+MAX_DISTANCE=0.01 # Tolerancia de distancia para agrupar nodos similares.
 
 def run_pipeline(): 
     # 1. Creamos el modelo (Cerebro)
@@ -26,13 +32,13 @@ def run_pipeline():
 
     logger.info("Iniciando generación de grillas...")
     grid_factory = GridFactory(modelo)
-    grid_factory.generate_grids(eps_dist=0.1, canonical_angles=None)
+    grid_factory.generate_grids(eps_deg=EPS_ANGLE,eps_dist=EPS_DIST,round_decimal=ROUND_DECIMAL,canonical_angles=CANONICAL_ANGLES,snap_threshold=SNAP_THRESHOLD)
     
     #optimizer = GeometryOptimizer(modelo)
     #logger.info("Iniciando depuración geométrica...")
     #optimizer.cluster_and_fix_angles(eps_degrees=5)
     # Re-indexación: Unificar nodos que colapsaron tras la rotación
-    mapping = modelo.node_manager.reindex(tolerance=0.01)
+    mapping = modelo.node_manager.reindex(tolerance=MAX_DISTANCE)
     # 3. Escribimos en ETABS (Manos)
     #writer = EtabsWriter(modelo)
     #writer.write_all()
