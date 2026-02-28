@@ -6,6 +6,7 @@ from services.slab_processor import SlabProcessor
 from .material import ConcreteMaterial, SteelMaterial
 from .sections import FrameSection, ShellSection
 from .Story import StoryManager
+from .grid_system import GridManager
 import numpy as np
 
 class Model:
@@ -16,6 +17,7 @@ class Model:
         self.node_manager = NodeManager(tolerance=0.005) # 5mm por defecto
         self.wall_processor = WallProcessor(self)
         self.slab_processor = SlabProcessor(self)
+        self.grid_manager = GridManager(self)
 
         # Colecciones de elementos
         self.story_manager = StoryManager()
@@ -27,9 +29,6 @@ class Model:
         self.columns = []
         self.walls = []
         self.slabs = []
-        
-        # Sistema de grillas (se generará en el pipeline)
-        self.grid_systems = []
  
     def add_beam(self, revit_id, section, material, level, p1, p2):
         """
@@ -101,9 +100,6 @@ class Model:
             print("La losa no es completament horizontal, se descarta")
 
         # 3. Clasificamos y guardamos los resultados
-
-    def add_story(self, story):
-        self.story_manager.add_story(story)
 
     def add_section(self, type_sec,name,material,params):
         if type_sec == 'Frame' and name not in self.sections:

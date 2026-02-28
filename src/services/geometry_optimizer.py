@@ -70,7 +70,7 @@ class GeometryOptimizer:
 
     def _transform_grid_systems(self, dx, dy, alpha_deg):
         """Ajusta las grillas existentes a la nueva posición del modelo."""
-        for system in self.model.grid_systems:
+        for system in self.model.grid_manager.systems:
             for grid in system.grids:
                 # Rotar el ángulo maestro
                 grid.angle_deg = (grid.angle_deg + alpha_deg) % 180

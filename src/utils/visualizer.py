@@ -136,7 +136,10 @@ class StructuralVisualizer:
             min(n.y for n in nodes), max(n.y for n in nodes)
         )
 
-        for system in self.model.grid_systems:
+        # Ahora obtenemos los sistemas desde el grid_manager
+        grid_systems = self.model.grid_manager.systems
+
+        for system in grid_systems:
             for grid in system.grids:
                 # Obtenemos los extremos cartesianos desde la Normal de Hesse
                 p1, p2 = grid.get_endpoints(bbox)

@@ -6,7 +6,6 @@ from services.etabs_writer import EtabsWriter
 from services.geometry_optimizer import GeometryOptimizer
 from utils.visualizer import StructuralVisualizer
 from services.grid_factory import GridFactory
-from services.grid_manager import GridManager
 
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
@@ -28,7 +27,6 @@ def run_pipeline():
     # 2. Cargamos datos desde el JSON (Oídos)
     loader = RevitLoader(modelo)
     grid_factory = GridFactory(modelo)
-    grid_manager = GridManager(modelo)
     optimizer = GeometryOptimizer(modelo)
     viz = StructuralVisualizer(modelo)
 
@@ -46,7 +44,6 @@ def run_pipeline():
 
     logger.info("Iniciando generación de grillas...")
     grid_factory.generate_grids(eps_deg=EPS_ANGLE,eps_dist=EPS_DIST,round_decimal=ROUND_DECIMAL,canonical_angles=CANONICAL_ANGLES,snap_threshold=SNAP_THRESHOLD)
-    grid_manager.organize_grids(grid_factory.master_grids)
     grid_factory.snap_nodes(max_distance=MAX_DISTANCE)
     optimizer.remove_short_elements(LMIN) #hago una nueva depuración geométrica luego del desplazamiento y ajuste a la grilla
     optimizer.remove_orphan_nodes()

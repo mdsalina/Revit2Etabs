@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.cluster import DBSCAN
+import numpy as np
 import logging
+import string
 
 logger = logging.getLogger("Revit2Etabs.Service.GridFactory")
 
@@ -95,6 +97,9 @@ class GridFactory:
         for ang, rho_list in candidates.items():
             if not rho_list: continue
             self.master_grids[ang] = sorted([round(x,round_decimal) for x in self._cluster_rhos(rho_list, eps_dist)])
+        
+        # 3. Organizar y guardar las grillas
+        self.organize_and_save_grids(round_decimal=round_decimal)
 
     def _calculate_rho(self, x, y, angle_deg):
         # La normal está a +90 grados de la línea
@@ -172,4 +177,79 @@ class GridFactory:
             # Las líneas son paralelas (determinante cero)
             return None, None
 
+    def organize_and_save_grids(self, eps_angle=1.0,round_decimal=2):
+        """
+        Toma las grillas maestras generadas, busca pares ortogonales,
+        asigna nombres (A, B, 1, 2, Z1...) y las guarda en el modelo.
+        eps_angle: Tolerancia angular para considerar dos ángulos como iguales.
+        """
+        # Limpiamos sistemas previos en el manager del modelo
+        self.model.grid_manager.systems = []
+        
+        angles = sorted(self.master_grids.keys())
+        used_angles = set()
+        system_count = 0
+
+        # Iteramos sobre los ángulos encontrados por DBSCAN
+        for ang in angles:
+            if ang in used_angles:
+                continue
+
+            # 1. Buscar pareja ortogonal (90° de diferencia)
+            target_perp = (ang + 90) % 180
+            perp_ang = next((a for a in angles if abs(a - target_perp) < eps_angle), None)
+
+            # 2. Crear el Sistema de Grillas (G1, G2...)
+            system_name = f"G{system_count + 1}"
+            prefix = string.ascii_uppercase[system_count] if system_count < 26 else f"S{system_count}"
+
+            theta=theta = np.radians((ang + 90))
+            dx=round(self.master_grids[ang][0]* np.cos(theta),round_decimal)
+            dy=round(self.master_grids[ang][0]* np.sin(theta),round_decimal)
+            angle=ang
+            new_system = self.model.grid_manager.add_system(name=system_name, prefix=prefix,dx=dx,dy=dy,angle=angle)
             
+            # 3. Procesar Eje de Letras (Normalmente el ángulo menor o 0°)
+            # Las letras parten de A y avanzan con la coordenada Y (rho ascendente)
+            self._process_axis(new_system, ang, self.master_grids[ang], is_letter=True)
+            used_angles.add(ang)
+
+            # 4. Procesar Eje de Números (El perpendicular, normalmente 90°)
+            # Los números parten de 1 y avanzan con la coordenada X
+            if perp_ang is not None:
+                self._process_axis(new_system, perp_ang, self.master_grids[perp_ang], is_letter=False)
+                used_angles.add(perp_ang)
+
+            system_count += 1
+
+        logger.info(f"GridFactory: Se han organizado {system_count} sistemas de grillas.")
+
+    def _process_axis(self, system, angle, rhos, is_letter):
+        """Ordena los rhos y genera las líneas de grilla con sus etiquetas."""
+        
+        # Lógica de ordenamiento según tu requerimiento:
+        # - Para 0° (Horizontal): rho = y. Ordenar rho ASC para que A sea el Y menor.
+        # - Para 90° (Vertical): rho = -x. Ordenar rho DESC para que 1 sea el X menor.
+        is_vertical = abs(angle - 90) < 1.0
+        sorted_rhos = sorted(rhos, reverse=is_vertical)
+
+        for idx, rho in enumerate(sorted_rhos):
+            # Generar etiqueta (1, 2... o A, B... Z1, Z2)
+            label_val = self._generate_label(idx, is_letter)
+            full_label = f"{system.prefix}-{label_val}"
+            
+            # Evitar duplicados exactos en el mismo sistema
+            if not any(abs(g.rho - rho) < 1e-4 and abs(g.angle_deg - angle) < 0.1 for g in system.grids):
+                new_line = system.add_grid(label=full_label, angle_deg=angle, rho=rho)
+
+    def _generate_label(self, index, is_letter):
+        """Genera '1, 2, 3...' o 'A, B... Z, Z1, Z2...'"""
+        if not is_letter:
+            return str(index + 1)
+        
+        letters = string.ascii_uppercase
+        if index < 26:
+            return letters[index]
+        else:
+            # Lógica Z1, Z2 para excedentes de la Z
+            return f"Z{index - 25}"
