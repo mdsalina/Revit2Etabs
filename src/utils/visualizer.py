@@ -10,6 +10,7 @@ class StructuralVisualizer:
         self.ax = None
         self.annot = None
         self.scatter = None
+        self._zoom_factor = 1.0
 
     def plot_model(self, show_nodes=False, show_grids=False):
         """Genera una vista 3D interactiva de la estructura."""
@@ -57,32 +58,27 @@ class StructuralVisualizer:
         
         base_scale = 1.15
         
-        # Determinar si acercar o alejar (scroll up = alejar, scroll down = acercar en matplotlib usualmente, pero lo ajustaremos p/ comodidad)
+        # En matplotlib 3D, el "zoom" nativo sin distorsión y sin que los elementos 
+        # se salgan del recuadro del eje ('spill over') se hace alterando el aspecto 
+        # o la distancia de la cámara, en lugar de achicar los límites físicos xlim, ylim, zlim.
+        
         if event.button == 'up':
-            scale_factor = 1 / base_scale
-        elif event.button == 'down':
+            # Scroll arriba -> acercar -> mayor factor de zoom
             scale_factor = base_scale
+        elif event.button == 'down':
+            # Scroll abajo -> alejar -> menor factor de zoom
+            scale_factor = 1 / base_scale
         else:
             scale_factor = 1
 
-        # Obtener límites actuales
-        x_lim = self.ax.get_xlim3d()
-        y_lim = self.ax.get_ylim3d()
-        z_lim = self.ax.get_zlim3d()
+        self._zoom_factor *= scale_factor
         
-        # Obtener el centro actual
-        x_center = sum(x_lim) / 2
-        y_center = sum(y_lim) / 2
-        z_center = sum(z_lim) / 2
-        
-        # Calcular nuevos límites escalando desde el centro
-        new_x_radius = (x_lim[1] - x_center) * scale_factor
-        new_y_radius = (y_lim[1] - y_center) * scale_factor
-        new_z_radius = (z_lim[1] - z_center) * scale_factor
-        
-        self.ax.set_xlim3d([x_center - new_x_radius, x_center + new_x_radius])
-        self.ax.set_ylim3d([y_center - new_y_radius, y_center + new_y_radius])
-        self.ax.set_zlim3d([z_center - new_z_radius, z_center + new_z_radius])
+        try:
+            # Para Matplotlib >= 3.6
+            self.ax.set_box_aspect(None, zoom=self._zoom_factor)
+        except TypeError:
+            # Compatibilidad con versiones más antiguas de Matplotlib (e.g. < 3.6)
+            self.ax.dist = 10 / self._zoom_factor
         
         self.fig.canvas.draw_idle()
 
@@ -163,7 +159,7 @@ class StructuralVisualizer:
         y_range = abs(y_limits[1] - y_limits[0])
         z_range = abs(z_limits[1] - z_limits[0])
         
-        plot_radius = 0.5 * max([x_range, y_range, z_range])
+        plot_radius = 0.5 * max([x_range, y_range, z_range]) * 1.2
 
         ax.set_xlim3d([np.mean(x_limits) - plot_radius, np.mean(x_limits) + plot_radius])
         ax.set_ylim3d([np.mean(y_limits) - plot_radius, np.mean(y_limits) + plot_radius])

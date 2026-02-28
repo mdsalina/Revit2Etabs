@@ -3,9 +3,10 @@ from .elements.frame import FrameElement
 from .elements.wall import WallElement
 from services.wall_processor import WallProcessor
 from services.slab_processor import SlabProcessor
+from .material import ConcreteMaterial, SteelMaterial
+from .sections import FrameSection, ShellSection
+from .Story import StoryManager
 import numpy as np
-
-
 
 class Model:
     """ al cargar modelo siempre las unidades deben estar en metros"""
@@ -17,7 +18,7 @@ class Model:
         self.slab_processor = SlabProcessor(self)
 
         # Colecciones de elementos
-        self.stories = []
+        self.story_manager = StoryManager()
         self.materials = {}
         self.sections = {}
         
@@ -30,7 +31,6 @@ class Model:
         # Sistema de grillas (se generará en el pipeline)
         self.grid_systems = []
  
-
     def add_beam(self, revit_id, section, material, level, p1, p2):
         """
         Crea una instancia de FrameElement. p1 y p2 son tuplas (x, y, z).
@@ -102,6 +102,25 @@ class Model:
 
         # 3. Clasificamos y guardamos los resultados
 
+    def add_story(self, story):
+        self.story_manager.add_story(story)
+
+    def add_section(self, type_sec,name,material,params):
+        if type_sec == 'Frame' and name not in self.sections:
+            self.sections[name] = FrameSection(name, material, params.get('width',0.2), params.get('height',0.6))
+        elif type_sec == 'Shell' and name not in self.sections:
+            self.sections[name] = ShellSection(name, material, params.get('thickness',0.15))
+        else:
+            print(f"La sección {name} ya existe en el modelo.")
+    
+    def add_material(self, type_mat, name, params):
+        if type_mat == 'Concrete' and name not in self.materials:
+            self.materials[name] = ConcreteMaterial(name, params)
+        elif type_mat == 'Steel' and name not in self.materials:
+            self.materials[name] = SteelMaterial(name, params)
+        else:
+            print(f"El material {name} ya existe en el modelo.")
+    
     def get_summary(self):
         """Utilidad para ver qué tenemos cargado"""
         return {
@@ -110,7 +129,7 @@ class Model:
             "columnas": len(self.columns),
             "muros": len(self.walls),
             "losas": len(self.slabs),
-            "pisos": len(self.stories)
+            "pisos": len(self.story_manager.stories)
         }
     
     def get_nodes_summary(self,all=False):

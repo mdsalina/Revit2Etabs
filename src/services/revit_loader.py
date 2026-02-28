@@ -37,6 +37,7 @@ class RevitLoader:
             # 1. Cargar metadatos y niveles
             self._parse_project_info(data.get('project_info', {}))
             self._parse_stories(data.get('levels', []))
+            self._parse_materials(data.get('materials', []))
             
             # 2. Cargar secciones (Para asegurar que existan antes que los elementos)
             self._parse_sections(data.get('sections', []))
@@ -48,7 +49,6 @@ class RevitLoader:
             self._parse_walls(elements.get('walls', []))
             self._parse_slabs(elements.get('slabs', []))
 
-            logger.info("Carga de niveles completada.")
         except Exception as e:
             logger.error(f"Error crítico al leer el JSON: {str(e)}")
             raise
@@ -84,21 +84,44 @@ class RevitLoader:
         return value
     
     def _parse_stories(self, levels_data):
+        """
+        Carga los niveles del JSON, normaliza sus elevaciones a metros
+        y los organiza a través del StoryManager.
+        """
         for lvl in levels_data:
-            # Aquí podrías usar una clase Story si la definiste
-            lvl['elevation'] = self._apply_unit(lvl.get('elevation', 0.0))
-            self.model.stories.append(lvl)
+            name = lvl.get('name', 'S/N')
+            elevation_raw = lvl.get('elevation', 0.0)
+            level_id = lvl.get('id', name)
+
+            # 1. Normalizamos la elevación a la unidad base (metros)
+            elevation_m = self._apply_unit(elevation_raw)
+
+            # 2. Delegamos la creación y el ordenamiento al StoryManager del modelo
+            self.model.story_manager.add_story(name=name,elevation=elevation_m,level_id=level_id)
+        
+        logger.info(f"Se han cargado {len(self.model.story_manager.stories)} niveles correctamente.")
+            
+    def _parse_materials(self, materials_data):
+        for mat in materials_data:
+            name=mat['name']
+            type_mat=mat['type']
+            params = mat.get('parameters', {})
+            for param in params:
+                params[param] = self._apply_unit(params[param]) #ojo actualmante_apply_unit solo esta soportando unidades de longitud 
+
+            self.model.add_material(type_mat,name,params)
 
     def _parse_sections(self, sections_data):
         for sec in sections_data:
             name = sec['code_name']
-            # Escalamos parámetros de longitud: thickness, width, height
+            mat = sec.get('material', 'G30')
+            type_section = sec.get('type', 'Frame')
             params = sec.get('parameters', {})
-            for key in ['thickness', 'width', 'height']:
-                if key in params:
-                    params[key] = self._apply_unit(params[key])
             
-            self.model.sections[name] = sec
+            for param in params:
+                params[param] = self._apply_unit(params[param])
+            
+            self.model.add_section(type_section,name,mat,params)
 
     def _parse_frames(self, frames_data, category):
         for item in frames_data:
