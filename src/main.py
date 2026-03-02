@@ -29,10 +29,11 @@ def run_pipeline():
     grid_factory = GridFactory(modelo)
     optimizer = GeometryOptimizer(modelo)
     viz = StructuralVisualizer(modelo)
+    etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
     loader.load_json(f"data/{test[2]}.json")
-    viz.plot_model(show_nodes=True)
+    #viz.plot_model(show_nodes=True)
 
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
 
@@ -49,12 +50,12 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     optimizer.pre_snap_nodes(0.5*MAX_DISTANCE) #hago un agrupamiento de nodos, ahora con una tolerancia menor
 
-    viz.plot_model(show_nodes=True, show_grids=True)
-    
+    #viz.plot_model(show_nodes=True, show_grids=True)
+     
     # 3. Escribimos en ETABS (Manos)
     logger.info("Iniciando modelación en ETABS...")
-    #writer = EtabsWriter(modelo)
-    #writer.write_all()
+    etabs_model.connect_active_etabs()
+    etabs_model._write_stories()
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")

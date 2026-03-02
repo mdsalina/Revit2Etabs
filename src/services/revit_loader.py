@@ -130,7 +130,6 @@ class RevitLoader:
                 "p1": self._apply_unit(item['location']['start']),
                 "p2": self._apply_unit(item['location']['end']),
                 "section": item['section'],
-                "material": item.get('material', 'Generic'),
                 "level": item['level']
             }
             if category == "Beam":
@@ -145,7 +144,6 @@ class RevitLoader:
                 exterior_pts=self._apply_unit(w['location']['outline']),
                 holes_pts=self._apply_unit(w['location'].get('openings', [])),
                 section=w['section'],
-                material=w['material'],
                 level=w['level'],
                 height=self._apply_unit(w['location'].get('height', 3.0))
             )

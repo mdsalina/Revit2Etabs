@@ -2,8 +2,8 @@ from .base import StructuralElement
 import math
 
 class FrameElement(StructuralElement):
-    def __init__(self, revit_id, section, material, level, node_start, node_end):
-        super().__init__(revit_id, section, material, level)
+    def __init__(self, revit_id, section, level, node_start, node_end):
+        super().__init__(revit_id, section, level)
         self.start_node = node_start # Objeto clase Node
         self.end_node = node_end     # Objeto clase Node
 

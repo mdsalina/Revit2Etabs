@@ -2,12 +2,12 @@ from .base import StructuralElement
 import math
 
 class WallElement(StructuralElement):
-    def __init__(self, revit_id, section, material, level, nodes):
+    def __init__(self, revit_id, section, level, nodes):
         """
         nodes: Lista de objetos Node que definen el contorno.
         asume que los nodos estan ordenados secuencialmente y solo son 4
         """
-        super().__init__(revit_id, section, material, level)
+        super().__init__(revit_id, section, level)
         self.nodes = nodes # Lista de objetos Node [n1, n2, n3, n4]
         self.get_start_node_end_node()
 

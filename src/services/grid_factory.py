@@ -231,7 +231,7 @@ class GridFactory:
         # - Para 0° (Horizontal): rho = y. Ordenar rho ASC para que A sea el Y menor.
         # - Para 90° (Vertical): rho = -x. Ordenar rho DESC para que 1 sea el X menor.
         is_vertical = abs(angle - 90) < 1.0
-        sorted_rhos = sorted(rhos, reverse=is_vertical)
+        sorted_rhos = sorted(rhos)#, reverse=is_vertical)
 
         for idx, rho in enumerate(sorted_rhos):
             # Generar etiqueta (1, 2... o A, B... Z1, Z2)

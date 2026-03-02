@@ -18,6 +18,6 @@ Por hacer:
 - Agregar opcion de filtro de secctiones de distintos metodos de _parseo en revit_loader.py
 - Trabajar top_level, bottom_level, story_offset para cargar elementos en distintos niveles en revit_loader.py
 - completar etabs_writer.py
-- agregar dx,dy y rotacion a cada gridsystem de grid_factory.py
+
 
 

@@ -1,5 +1,5 @@
 from .BaseShellProcessor import BaseShellProcessor
-from domain.elements.wall import WallElement
+from domain.elements.slab import SlabElement
 
 class SlabProcessor(BaseShellProcessor):
     def _create_structural_element(self, rect_poly, parent_slab):
@@ -15,4 +15,4 @@ class SlabProcessor(BaseShellProcessor):
         # Eliminamos el último punto porque Shapely cierra el polígono (P5 = P1)
         nodes_3d = nodes_3d[:-1]
 
-        return WallElement(parent_slab.revit_id, parent_slab.section,parent_slab.material, parent_slab.level, nodes_3d)
+        return SlabElement(parent_slab.revit_id, parent_slab.section,parent_slab.level, nodes_3d)

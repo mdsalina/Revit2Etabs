@@ -9,21 +9,35 @@ class EtabsWriter:
         self.ETABSObject = None
         self.SapModel = None
 
-    def connect_etabs(self):
+    def connect_active_etabs(self):
+        """
+        Conecta con una instancia activa de ETABS.
+        """ 
+        try:
+            myEtabsObject = comtypes.client.GetActiveObject("CSI.ETABS.API.ETABSObject")
+            SapModel = myEtabsObject.SapModel
+            SapModel.SetPresentUnits(8)
+            return SapModel
+        except Exception as e:
+            raise ConnectionError("No se pudo conectar a ETABS. Asegúrate de que ETABS esté abierto.") from e
+
+    def connect_new_etabs(self):
         """Inicia una instancia de ETABS y obtiene el modelo de SAP."""
         try:
             # Creamos una instancia de ETABS
-            helper = comtypes.client.CreateObject("ETABSv1.Helper")
+            helper = comtypes.client.CreateObject('ETABSv1.Helper')
             helper = helper.QueryInterface(comtypes.gen.ETABSv1.cHelper)
             
-            # Puedes usar .StartEtabs() para abrir uno nuevo 
-            # o .AttachToElement() para uno ya abierto
-            self.ETABSObject = helper.StartEtabs()
-            self.SapModel = self.ETABSObject.SapModel
-            
+            EtabsObject = helper.CreateObjectProgID("CSI.ETABS.API.ETABSObject")
+            EtabsObject.ApplicationStart()
+
+            self.SapModel = EtabsObject.SapModel
+                
             # Inicializamos un nuevo modelo en unidades métricas
             self.SapModel.InitializeNewModel()
             self.SapModel.File.NewBlank()
+            self.SapModel.SetPresentUnits(8) # Unidades métricas
+
             print("Conectado a ETABS con éxito.")
         except Exception as e:
             print(f"Error al conectar con ETABS: {e}")
@@ -31,7 +45,7 @@ class EtabsWriter:
     def write_all(self):
         """Ejecuta el pipeline de creación en el orden correcto."""
         if not self.SapModel:
-            self.connect_etabs()
+            self.connect_new_etabs()
 
         # EL ORDEN IMPORTA EN ETABS:
         # 1. Definir Materiales y Secciones
@@ -40,6 +54,10 @@ class EtabsWriter:
         self._write_nodes()
         # 3. Definir Elementos (Frames, Shells)
         self._write_elements()
+
+    def _write_stories(self):
+        print("Definiendo pisos...")
+        self.model.story_manager.to_etabs_commands(self.SapModel)
 
     def _write_sections(self):
         print("Definiendo secciones...")

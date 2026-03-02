@@ -14,7 +14,7 @@ class StructuralVisualizer:
 
     def plot_model(self, show_nodes=False, show_grids=False):
         """Genera una vista 3D interactiva de la estructura."""
-        self.fig = plt.figure(figsize=(12, 9))
+        self.fig = plt.figure(figsize=(15, 12))
         self.ax = self.fig.add_subplot(111, projection='3d')
         
         self._plot_frames(self.ax)

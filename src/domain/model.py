@@ -1,6 +1,7 @@
 from .geometry import NodeManager
 from .elements.frame import FrameElement
 from .elements.wall import WallElement
+from .elements.slab import SlabElement
 from services.wall_processor import WallProcessor
 from services.slab_processor import SlabProcessor
 from .material import ConcreteMaterial, SteelMaterial
@@ -30,7 +31,7 @@ class Model:
         self.walls = []
         self.slabs = []
  
-    def add_beam(self, revit_id, section, material, level, p1, p2):
+    def add_beam(self, revit_id, section, level, p1, p2):
         """
         Crea una instancia de FrameElement. p1 y p2 son tuplas (x, y, z).
         """
@@ -38,27 +39,27 @@ class Model:
         n1 = self.node_manager.get_or_create_node(*p1)
         n2 = self.node_manager.get_or_create_node(*p2)
         
-        beam = FrameElement(revit_id, section, material, level, n1, n2)
+        beam = FrameElement(revit_id, section, level, n1, n2)
         self.beams.append(beam)
         return beam
 
-    def add_column(self, revit_id, section, material, level, p1, p2):
+    def add_column(self, revit_id, section, level, p1, p2):
         """Crea una columna como FrameElement."""
 
         n1 = self.node_manager.get_or_create_node(*p1)
         n2 = self.node_manager.get_or_create_node(*p2)
         
-        col = FrameElement(revit_id, section, material, level, n1, n2)
+        col = FrameElement(revit_id, section, level, n1, n2)
         self.columns.append(col)
         return col
 
-    def add_wall(self, revit_id, exterior_pts, holes_pts, section, material, level, height):
+    def add_wall(self, revit_id, exterior_pts, holes_pts, section, level, height):
         """
         Recibe la data cruda, la procesa a través del WallProcessor 
         y agrega los sub-elementos resultantes al modelo.
         """
         # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
-        temp_wall = WallElement(revit_id, section, material, level, [])
+        temp_wall = WallElement(revit_id, section, level, [])
         temp_wall.exterior_points = exterior_pts
         temp_wall.holes_points = holes_pts
         temp_wall.total_height = height
@@ -82,7 +83,7 @@ class Model:
         y agrega los sub-elementos resultantes al modelo.
         """
         # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
-        temp_slab = WallElement(revit_id, section, material, level, [])
+        temp_slab = SlabElement(revit_id, section, level, [])
         temp_slab.exterior_points = exterior_pts
         temp_slab.holes_points = holes_pts
         maxz=max(node[2] for node in temp_slab.exterior_points)

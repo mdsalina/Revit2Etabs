@@ -33,7 +33,6 @@ class WallProcessor(BaseShellProcessor):
             return WallElement(
                 revit_id=parent_wall.revit_id,
                 section=parent_wall.section,
-                material=parent_wall.material,
                 level=parent_wall.level,
                 nodes=nodes_3d
             )
@@ -61,7 +60,6 @@ class WallProcessor(BaseShellProcessor):
         return FrameElement(
             revit_id=parent_wall.revit_id,
             section=f"SPANDREL_{parent_wall.section}", # Sección especial de viga
-            material=parent_wall.material,
             level=parent_wall.level,
             node_start=node_start,
             node_end=node_end
