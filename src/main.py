@@ -50,7 +50,7 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     optimizer.pre_snap_nodes(0.5*MAX_DISTANCE) #hago un agrupamiento de nodos, ahora con una tolerancia menor
 
-    viz.plot_model(show_nodes=True, show_grids=True)
+    viz.plot_model(show_nodes=False, show_grids=True)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")

@@ -48,7 +48,7 @@ class GridFactory:
                         final_angle = float(can_ang)
                         break
             
-            found_masters.append(final_angle)
+            found_masters.append(round(final_angle,0))
 
         self.master_angles = sorted(list(set(found_masters)))
         logger.info(f"Ángulos maestros detectados: {self.master_angles}")

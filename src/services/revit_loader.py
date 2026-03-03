@@ -5,7 +5,7 @@ from services.load_filter import LoadFilter
 
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 
-STORY_FILTER=["L1"]
+STORY_FILTER=["L1", "L2"]
 SECTION_FILTER=None
 CATEGORIES_FILTER=['walls','frames']
 
