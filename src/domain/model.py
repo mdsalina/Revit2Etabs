@@ -77,7 +77,7 @@ class Model:
         
         return new_elements
     
-    def add_slab(self, revit_id, exterior_pts, holes_pts, section, material, level):
+    def add_slab(self, revit_id, exterior_pts, holes_pts, section, level):
         """
         Recibe la data cruda, la procesa a través del WallProcessor 
         y agrega los sub-elementos resultantes al modelo.
@@ -86,12 +86,14 @@ class Model:
         temp_slab = SlabElement(revit_id, section, level, [])
         temp_slab.exterior_points = exterior_pts
         temp_slab.holes_points = holes_pts
-        maxz=max(node[2] for node in temp_slab.exterior_points)
-        minz=min(node[2] for node in temp_slab.exterior_points)
-        maxz_hole=max(node[2] for node in temp_slab.holes_points)
-        minz_hole=min(node[2] for node in temp_slab.holes_points)
+
+        #Verificamos que la losa sea horizontal (Z similar para todos los nodos)
+        maxz=max(node[2] for node in temp_slab.exterior_points) if temp_slab.exterior_points else 0
+        minz=min(node[2] for node in temp_slab.exterior_points) if temp_slab.exterior_points else 0
+        maxz_hole=max(node[2] for node in temp_slab.holes_points) if temp_slab.holes_points else maxz
+        minz_hole=min(node[2] for node in temp_slab.holes_points) if temp_slab.holes_points else minz
         # 2. El procesador descompone la losa en rectángulos analíticos
-        # Importante: El WallProcessor usará internamente model.node_manager
+        # Importante: El SlabProcessor usará internamente model.node_manager
         if abs(maxz-minz)<0.01 or abs(maxz_hole-minz_hole)<0.01:
             new_elements = self.slab_processor.process_element(temp_slab)
             for elem in new_elements:

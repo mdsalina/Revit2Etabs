@@ -2,6 +2,9 @@ import os
 import sys
 # Importamos comtypes para la comunicación con la API de ETABS
 import comtypes.client
+import logging
+
+logger = logging.getLogger("Revit2Etabs.Service.EtabsWriter")
 
 class EtabsWriter:
     def __init__(self, model):
@@ -15,11 +18,13 @@ class EtabsWriter:
         """ 
         try:
             myEtabsObject = comtypes.client.GetActiveObject("CSI.ETABS.API.ETABSObject")
-            SapModel = myEtabsObject.SapModel
-            SapModel.SetPresentUnits(8)
-            return SapModel
+            self.SapModel = myEtabsObject.SapModel
+            self.SapModel.SetPresentUnits(8)
+            logger.info("Conectado a ETABS")
+            return self.SapModel
         except Exception as e:
             raise ConnectionError("No se pudo conectar a ETABS. Asegúrate de que ETABS esté abierto.") from e
+
 
     def connect_new_etabs(self):
         """Inicia una instancia de ETABS y obtiene el modelo de SAP."""
@@ -56,7 +61,7 @@ class EtabsWriter:
         self._write_elements()
 
     def _write_stories(self):
-        print("Definiendo pisos...")
+        logger.info("Definiendo pisos...")
         self.model.story_manager.to_etabs_commands(self.SapModel)
 
     def _write_sections(self):

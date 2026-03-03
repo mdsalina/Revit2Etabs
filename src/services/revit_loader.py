@@ -1,8 +1,13 @@
 import json
 from pathlib import Path
 import logging
+from services.load_filter import LoadFilter
 
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
+
+STORY_FILTER=["L1"]
+SECTION_FILTER=None
+CATEGORIES_FILTER=['walls','frames']
 
 class RevitLoader:
     UNIT_FACTORS = {
@@ -18,6 +23,7 @@ class RevitLoader:
         Recibe una instancia de la clase Model para poblarla.
         """
         self.model = model
+        self.filter = LoadFilter(STORY_FILTER, SECTION_FILTER, CATEGORIES_FILTER)
 
     def load_json(self, file_path):
         """
@@ -93,9 +99,11 @@ class RevitLoader:
             elevation_raw = lvl.get('elevation', 0.0)
             level_id = lvl.get('id', name)
 
+            if self.filter and self.filter.levels and name not in self.filter.levels:
+                continue  
+
             # 1. Normalizamos la elevación a la unidad base (metros)
             elevation_m = self._apply_unit(elevation_raw)
-
             # 2. Delegamos la creación y el ordenamiento al StoryManager del modelo
             self.model.story_manager.add_story(name=name,elevation=elevation_m,level_id=level_id)
         
@@ -125,6 +133,12 @@ class RevitLoader:
 
     def _parse_frames(self, frames_data, category):
         for item in frames_data:
+            level_name=item['level']
+            section_name=item['section']
+
+            if self.filter and not self.filter.is_valid(level=level_name, section=section_name,category="frames"):
+                continue
+
             params = {
                 "revit_id": item['revit_id'],
                 "p1": self._apply_unit(item['location']['start']),
@@ -139,6 +153,12 @@ class RevitLoader:
 
     def _parse_walls(self, walls_data):
         for w in walls_data:
+            level_name=w['level']
+            section_name=w['section']
+
+            if self.filter and not self.filter.is_valid(level=level_name, section=section_name,category="walls"):
+                continue
+
             self.model.add_wall(
                 revit_id=w['revit_id'],
                 exterior_pts=self._apply_unit(w['location']['outline']),
@@ -150,11 +170,16 @@ class RevitLoader:
     
     def _parse_slabs(self, slabs_data):
         for s in slabs_data:
+            level_name=s['level']
+            section_name=s['section']
+
+            if self.filter and not self.filter.is_valid(level=level_name, section=section_name,category="slabs"):
+                continue
+
             self.model.add_slab(
                 revit_id=s['revit_id'],
                 exterior_pts=self._apply_unit(s['location']['outline']),
                 holes_pts=self._apply_unit(s['location'].get('openings', [])),
                 section=s['section'],
-                material=s['material'],
                 level=s['level'],
             )

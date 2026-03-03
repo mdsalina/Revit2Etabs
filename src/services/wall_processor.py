@@ -20,22 +20,12 @@ class WallProcessor(BaseShellProcessor):
         # Eliminamos el último punto porque Shapely cierra el polígono (P5 = P1)
         nodes_3d = nodes_3d[:-1]
         
-        #calculo razon de aspecto
-        minx, miny, maxx, maxy = rect_poly.bounds
-        large=maxx-minx
-        height = maxy - miny
-        razonLh=large/height
-        
-        #Si la razon de aspecto es mayor a 4 creo un elemento viga
-        if razonLh>4:
-            return self._create_spandrel_frame(rect_poly, parent_wall, nodes_3d)
-        else:
-            return WallElement(
-                revit_id=parent_wall.revit_id,
-                section=parent_wall.section,
-                level=parent_wall.level,
-                nodes=nodes_3d
-            )
+        return WallElement(
+            revit_id=parent_wall.revit_id,
+            section=parent_wall.section,
+            level=parent_wall.level,
+            nodes=nodes_3d
+        )
     
     def _create_spandrel_frame(self, rect_poly, parent_wall, nodes_3d):
         """Genera una viga a partir del eje central del rectángulo."""

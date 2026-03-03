@@ -67,12 +67,11 @@ class StoryManager:
         SpliceAbove=[False for elem in self.stories] # No hay empalme arriba
         SpliceHeight=[0 for elem in self.stories] # Altura de empalme (0 por defecto)
 
-        print("Definiendo pisos...")
-        #ret=etabs_model.Story.SetStories(StoryNames, StoryElevations, StoryHeights,IsMasterStory, SimilarToStory, SpliceAbove, SpliceHeight)
-        #if ret != 0:
-        #    raise Exception(f"Error al agregar pisos: {ret}")
-        #
-        #etabs_model.View.RefreshView(0,False)
+        ret=etabs_model.Story.SetStories(StoryNames, StoryElevations, StoryHeights,IsMasterStory, SimilarToStory, SpliceAbove, SpliceHeight)
+        if ret != 0:
+            raise Exception(f"Error al agregar pisos: {ret}")
+        
+        etabs_model.View.RefreshView(0,False)
         
 
     
