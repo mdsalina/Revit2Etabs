@@ -10,7 +10,7 @@ from services.grid_factory import GridFactory
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM2']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM2','VM_calculo']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.1 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
@@ -32,7 +32,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[4]}.json")
+    loader.load_json(f"data/{test[5]}.json")
     viz.plot_model(show_nodes=False)
 
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
@@ -50,7 +50,7 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     optimizer.pre_snap_nodes(0.5*MAX_DISTANCE) #hago un agrupamiento de nodos, ahora con una tolerancia menor
 
-    viz.plot_model(show_nodes=True, show_grids=True)
+    viz.plot_model(show_nodes=False, show_grids=True)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
