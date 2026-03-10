@@ -36,7 +36,6 @@ class GridManager:
         self.systems.append(GridSystem(name, prefix,dx,dy,angle))
         return self.systems[-1]
 
-
     def get_all_grids(self):
         """Devuelve una lista plana de todas las GridLine de todos los sistemas."""
         all_lines = []

@@ -24,7 +24,7 @@ class StoryManager:
         # 1. Verificación de duplicados
         for s in self.stories:
             if s.name == name or s.id == level_id or s.elevation == elevation:
-                logger.warning(f"El piso {name} o elevación {elevation} o id {level_id} ya existe, se omite.")
+                logger.warning(f"El piso {name} o elevación {round(elevation,2)} o id {level_id} ya existe, se omite.")
                 return
 
         new_story = Story(name, elevation, level_id)
@@ -36,8 +36,8 @@ class StoryManager:
         """Calcula la altura de entrepiso respecto al nivel inferior."""
         for i, s in enumerate(self.stories):
             if s.id == story_id:
-                if i == 0: return s.elevation
-                return s.elevation - self.stories[i-1].elevation
+                if i == 0: return abs(round(s.elevation,2))
+                return abs(round(s.elevation - self.stories[i-1].elevation,2))
         return 0.0
 
     def get_total_height(self):
@@ -55,21 +55,36 @@ class StoryManager:
                 return s
         return None
 
+    def get_auto_dz(self):
+        """
+        Identifica el desplazamiento necesario para que el nivel 
+        más bajo tenga elevación 0.
+        """
+        if not self.stories:
+            return 0.0
+        # Como los stories están ordenados por elevación:
+        min_elevation = self.stories[0].elevation
+        return -min_elevation
+
+    def apply_dz(self, dz):
+        """Aplica el desplazamiento a todos los niveles registrados."""
+        for story in self.stories:
+            story.elevation += dz
+
     def to_etabs_commands(self,etabs_model):
         """
         Genera una lista de comandos para definir la estructura de pisos en ETABS.
         """
-        StoryNames = [story.name for story in self.stories] # Elevación de cada piso (0 por defecto)
+        StoryNames = [f"P{i+1}" for i, story in enumerate(self.stories[1:])] # Elevación de cada piso (0 por defecto)
         StoryElevations=[story.elevation for story in self.stories] # Elevación de cada piso
-        StoryHeights=[self.get_story_height(story.id) for story in self.stories] # Altura de cada piso
-        IsMasterStory=[False for elem in self.stories] # Ninguno es un piso maestro
-        SimilarToStory=["None" for elem in self.stories] # Ninguno es similar a otro
-        SpliceAbove=[False for elem in self.stories] # No hay empalme arriba
-        SpliceHeight=[0 for elem in self.stories] # Altura de empalme (0 por defecto)
-
+        StoryHeights=[self.get_story_height(story.id) for story in self.stories[1:]] # Altura de cada piso
+        IsMasterStory=[False for elem in self.stories[1:]] # Ninguno es un piso maestro
+        SimilarToStory=["None" for elem in self.stories[1:]] # Ninguno es similar a otro
+        SpliceAbove=[False for elem in self.stories[1:]] # No hay empalme arriba
+        SpliceHeight=[0 for elem in self.stories[1:]] # Altura de empalme (0 por defecto)
         ret=etabs_model.Story.SetStories(StoryNames, StoryElevations, StoryHeights,IsMasterStory, SimilarToStory, SpliceAbove, SpliceHeight)
         if ret != 0:
-            raise Exception(f"Error al agregar pisos: {ret}")
+            raise Exception(f"Error al agregar pisos")
         
         etabs_model.View.RefreshView(0,False)
         

@@ -5,7 +5,7 @@ from services.load_filter import LoadFilter
 
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 
-STORY_FILTER=None#["L1"]
+STORY_FILTER=["L1", "L2","L3","L4"]
 SECTION_FILTER=None
 CATEGORIES_FILTER=['walls','frames']
 
@@ -24,6 +24,7 @@ class RevitLoader:
         """
         self.model = model
         self.filter = LoadFilter(STORY_FILTER, SECTION_FILTER, CATEGORIES_FILTER)
+        self.dz = 0.0 # Desplazamiento vertical acumulado
 
     def load_json(self, file_path):
         """
@@ -44,7 +45,12 @@ class RevitLoader:
             self._parse_project_info(data.get('project_info', {}))
             self._parse_stories(data.get('levels', []))
             self._parse_materials(data.get('materials', []))
-            
+
+            # 2. Obtenemos y aplicamos el DZ a los niveles
+            self.dz = self.model.story_manager.get_auto_dz()
+            self.model.story_manager.apply_dz(self.dz)
+            logger.info(f"Normalización vertical: DZ = {self.dz:.4f}m aplicado.")
+
             # 2. Cargar secciones (Para asegurar que existan antes que los elementos)
             self._parse_sections(data.get('sections', []))
 
@@ -70,24 +76,35 @@ class RevitLoader:
         
         logger.info(f"Unidades del modelo: {unit_key}. Factor de normalización: {self.factor}")
 
-    def _apply_unit(self, value):
+    def _apply_unit_dim(self, value):
+        """Para espesores, anchos, alturas. Solo escala."""
+        return value * self.factor
+    
+    def _apply_unit_pos(self, value):
         """
-        Escalador polimórfico:
-        - Si es un número: lo escala directamente.
-        - Si es una lista [x, y, z]: escala cada componente.
-        - Si es una lista de listas (como huecos): escala recursivamente.
+        Para coordenadas [x, y, z]. Escala y aplica el DZ 
+        exclusivamente al eje Z.
         """
         if value is None:
             return None
             
-        if isinstance(value, (int, float)):
-            return value * self.factor
-            
         if isinstance(value, list):
-            # Caso especial para listas de coordenadas o listas de huecos
-            return [self._apply_unit(v) for v in value]
+            if not value:
+                return []
             
-        return value
+            if len(value) == 3 and isinstance(value[0], (int, float)):
+                x, y, z = value
+                return [
+                    x * self.factor,
+                    y * self.factor,
+                    (z * self.factor) + self.dz # Aplicamos el DZ aquí
+                ]
+            
+            # Si es una lista de listas (como un outline o huecos)
+            if isinstance(value[0], list):
+                return [self._apply_unit_pos(v) for v in value]
+            
+        return value * self.factor
     
     def _parse_stories(self, levels_data):
         """
@@ -99,13 +116,13 @@ class RevitLoader:
             elevation_raw = lvl.get('elevation', 0.0)
             level_id = lvl.get('id', name)
 
-            if self.filter and self.filter.levels and name not in self.filter.levels:
+            if self.filter and self.filter.levels and level_id not in self.filter.levels:
                 continue  
 
             # 1. Normalizamos la elevación a la unidad base (metros)
-            elevation_m = self._apply_unit(elevation_raw)
+            elevation_m = self._apply_unit_pos(elevation_raw)
             # 2. Delegamos la creación y el ordenamiento al StoryManager del modelo
-            self.model.story_manager.add_story(name=name,elevation=elevation_m,level_id=level_id)
+            self.model.story_manager.add_story(name=name,elevation=round(elevation_m,2),level_id=level_id)
         
         logger.info(f"Se han cargado {len(self.model.story_manager.stories)} niveles correctamente.")
             
@@ -115,7 +132,7 @@ class RevitLoader:
             type_mat=mat['type']
             params = mat.get('parameters', {})
             for param in params:
-                params[param] = self._apply_unit(params[param]) #ojo actualmante_apply_unit solo esta soportando unidades de longitud 
+                params[param] = self._apply_unit_dim(params[param]) #ojo actualmante_apply_unit solo esta soportando unidades de longitud 
 
             self.model.add_material(type_mat,name,params)
 
@@ -127,7 +144,7 @@ class RevitLoader:
             params = sec.get('parameters', {})
             
             for param in params:
-                params[param] = self._apply_unit(params[param])
+                params[param] = self._apply_unit_dim(params[param])
             
             self.model.add_section(type_section,name,mat,params)
 
@@ -141,8 +158,8 @@ class RevitLoader:
 
             params = {
                 "revit_id": item['revit_id'],
-                "p1": self._apply_unit(item['location']['start']),
-                "p2": self._apply_unit(item['location']['end']),
+                "p1": self._apply_unit_pos(item['location']['start']),
+                "p2": self._apply_unit_pos(item['location']['end']),
                 "section": item['section'],
                 "level": item['level']
             }
@@ -161,11 +178,11 @@ class RevitLoader:
 
             self.model.add_wall(
                 revit_id=w['revit_id'],
-                exterior_pts=self._apply_unit(w['location']['outline']),
-                holes_pts=self._apply_unit(w['location'].get('openings', [])),
+                exterior_pts=self._apply_unit_pos(w['location']['outline']),
+                holes_pts=self._apply_unit_pos(w['location'].get('openings', [])),
                 section=w['section'],
                 level=w['level'],
-                height=self._apply_unit(w['location'].get('height', 3.0))
+                height=self._apply_unit_dim(w['location'].get('height', 3.0))
             )
     
     def _parse_slabs(self, slabs_data):
@@ -178,8 +195,8 @@ class RevitLoader:
 
             self.model.add_slab(
                 revit_id=s['revit_id'],
-                exterior_pts=self._apply_unit(s['location']['outline']),
-                holes_pts=self._apply_unit(s['location'].get('openings', [])),
+                exterior_pts=self._apply_unit_pos(s['location']['outline']),
+                holes_pts=self._apply_unit_pos(s['location'].get('openings', [])),
                 section=s['section'],
                 level=s['level'],
             )

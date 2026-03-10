@@ -153,16 +153,35 @@ class StructuralVisualizer:
                 ax.text(p2[0], p2[1], 0, f"{grid.label} ", color='gray', fontsize=7, fontweight='bold', ha='right')
 
     def _set_axes_equal(self, ax):
-        """Ajusta los límites para que 1m en X sea igual a 1m en Y y Z."""
-        x_limits = ax.get_xlim3d()
-        y_limits = ax.get_ylim3d()
-        z_limits = ax.get_zlim3d()
+        """Ajusta los límites para que 1m en X sea igual a 1m en Y y Z usando los nodos del modelo."""
+        nodes = list(self.model.node_manager.nodes.values())
+        if not nodes:
+            x_limits = ax.get_xlim3d()
+            y_limits = ax.get_ylim3d()
+            z_limits = ax.get_zlim3d()
+        else:
+            x_vals = [n.x for n in nodes]
+            y_vals = [n.y for n in nodes]
+            z_vals = [n.z for n in nodes]
+            
+            x_limits = [min(x_vals), max(x_vals)]
+            y_limits = [min(y_vals), max(y_vals)]
+            z_limits = [min(z_vals), max(z_vals)]
+            
+            if x_limits[0] == x_limits[1]: x_limits = [x_limits[0] - 1, x_limits[1] + 1]
+            if y_limits[0] == y_limits[1]: y_limits = [y_limits[0] - 1, y_limits[1] + 1]
+            if z_limits[0] == z_limits[1]: z_limits = [z_limits[0] - 1, z_limits[1] + 1]
 
         x_range = abs(x_limits[1] - x_limits[0])
         y_range = abs(y_limits[1] - y_limits[0])
         z_range = abs(z_limits[1] - z_limits[0])
         
-        plot_radius = 0.5 * max([x_range, y_range, z_range]) * 1.2
+        # Un valor mínimo para visualizar un modelo sin ancho/largo significativo
+        max_range = max([x_range, y_range, z_range])
+        if max_range == 0:
+            max_range = 1.0
+            
+        plot_radius = 0.5 * max_range * 1.2
 
         ax.set_xlim3d([np.mean(x_limits) - plot_radius, np.mean(x_limits) + plot_radius])
         ax.set_ylim3d([np.mean(y_limits) - plot_radius, np.mean(y_limits) + plot_radius])
