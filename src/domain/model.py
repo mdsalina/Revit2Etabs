@@ -90,8 +90,8 @@ class Model:
         #Verificamos que la losa sea horizontal (Z similar para todos los nodos)
         maxz=max(node[2] for node in temp_slab.exterior_points) if temp_slab.exterior_points else 0
         minz=min(node[2] for node in temp_slab.exterior_points) if temp_slab.exterior_points else 0
-        maxz_hole=max(node[2] for node in temp_slab.holes_points) if temp_slab.holes_points else maxz
-        minz_hole=min(node[2] for node in temp_slab.holes_points) if temp_slab.holes_points else minz
+        maxz_hole=max(pt[2] for outline in temp_slab.holes_points for pt in outline) if temp_slab.holes_points else maxz
+        minz_hole=min(pt[2] for outline in temp_slab.holes_points for pt in outline) if temp_slab.holes_points else minz
         # 2. El procesador descompone la losa en rectángulos analíticos
         # Importante: El SlabProcessor usará internamente model.node_manager
         if abs(maxz-minz)<0.01 or abs(maxz_hole-minz_hole)<0.01:

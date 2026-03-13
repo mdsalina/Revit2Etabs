@@ -35,10 +35,24 @@ class WallElement(StructuralElement):
         return f"Wall con {len(self.nodes)}"
 
     def to_etabs_command(self, sap_model):
-        # La API de ETABS usa oAPI.SapModel.AreaObj.AddByPoint
-        node_names = [str(n.id) for n in self.nodes]
-        print(f"Enviando a ETABS: Area {self.section} con nodos {node_names}")
-    
+        """
+        Genera el comando AddByCoord para ETABS.
+        """
+        n_nodes = len(self.nodes)
+        
+        # Extraemos las coordenadas como tuplas para la API
+        x_coords = [round(n.x, 4) for n in self.nodes]
+        y_coords = [round(n.y, 4) for n in self.nodes]
+        z_coords = [round(n.z, 4) for n in self.nodes]
+        
+        # Formato: AddByCoord(NumberPoints, X, Y, Z, Name, PropName, UserName)
+        # Dejamos el nombre vacío ("") para que ETABS asigne uno automático
+        #temporalemnte definire la seccion con M-20 para pruebas, luego sera self.Section
+        section="M-20"
+        ret = sap_model.AreaObj.AddByCoord(n_nodes, x_coords, y_coords, z_coords, "", section)
+
+        return ret
+        
     def get_angle(self):
         # Para un muro, calculamos el ángulo del primer segmento (N1 a N2)
         # Asumiendo que los nodos están ordenados secuencialmente
@@ -56,7 +70,7 @@ class WallElement(StructuralElement):
             dx = n2.x - n1.x
             dy = n2.y - n1.y
         
-        return round(math.degrees(math.atan2(dy, dx))%180, 0)
+        return round(math.degrees(math.atan2(dy, dx)), 0)%180
 
     def get_length(self):
         dx = self.end_node.x - self.start_node.x

@@ -10,7 +10,7 @@ class FrameElement(StructuralElement):
     def get_angle(self):
         dx = self.end_node.x - self.start_node.x
         dy = self.end_node.y - self.start_node.y
-        return round(math.degrees(math.atan2(dy, dx))%180, 0)
+        return round(math.degrees(math.atan2(dy, dx)), 0)%180
 
     def get_length(self):
         dx = self.end_node.x - self.start_node.x
@@ -26,6 +26,6 @@ class FrameElement(StructuralElement):
         ret = sap_model.FrameObj.AddByCoord(
             self.start_node.x, self.start_node.y, self.start_node.z,
             self.end_node.x, self.end_node.y, self.end_node.z,
-            "", self.section, "None"
+            "", "V-20/30", "None"
         )
         return ret

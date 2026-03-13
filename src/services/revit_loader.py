@@ -5,9 +5,9 @@ from services.load_filter import LoadFilter
 
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 
-STORY_FILTER=["L1", "L2","L3","L4"]
+STORY_FILTER=None #["L1", "L2","L3","L4"]
 SECTION_FILTER=None
-CATEGORIES_FILTER=['walls','frames']
+CATEGORIES_FILTER=None #['walls','frames']
 
 class RevitLoader:
     UNIT_FACTORS = {
@@ -105,6 +105,14 @@ class RevitLoader:
                 return [self._apply_unit_pos(v) for v in value]
             
         return value * self.factor
+
+    def _extract_openings(self, location_data):
+        openings = location_data.get('openings', [])
+        if not openings:
+            return []
+        if isinstance(openings[0], dict) and 'outline' in openings[0]:
+            return [op['outline'] for op in openings]
+        return openings
     
     def _parse_stories(self, levels_data):
         """
@@ -179,7 +187,7 @@ class RevitLoader:
             self.model.add_wall(
                 revit_id=w['revit_id'],
                 exterior_pts=self._apply_unit_pos(w['location']['outline']),
-                holes_pts=self._apply_unit_pos(w['location'].get('openings', [])),
+                holes_pts=self._apply_unit_pos(self._extract_openings(w['location'])),
                 section=w['section'],
                 level=w['level'],
                 height=self._apply_unit_dim(w['location'].get('height', 3.0))
@@ -196,7 +204,7 @@ class RevitLoader:
             self.model.add_slab(
                 revit_id=s['revit_id'],
                 exterior_pts=self._apply_unit_pos(s['location']['outline']),
-                holes_pts=self._apply_unit_pos(s['location'].get('openings', [])),
+                holes_pts=self._apply_unit_pos(self._extract_openings(s['location'])),
                 section=s['section'],
                 level=s['level'],
             )

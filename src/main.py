@@ -10,11 +10,11 @@ from services.grid_factory import GridFactory
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq 2']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq 2','Casa_BN']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.1 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
-SNAP_THRESHOLD=2.5 # Distancia angular máxima para que un elemento se considere parte de un ángulo canónico
+SNAP_THRESHOLD=20 # Distancia angular máxima para que un elemento se considere parte de un ángulo canónico
 CANONICAL_ANGLES=[0,26,64] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
 MAX_DISTANCE=0.15 # Tolerancia de distancia para agrupar nodos similares.
 LMIN=0.2 # Longitud mínima para elementos estructurales.
@@ -32,8 +32,8 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[7]}.json")
-    viz.plot_model(show_nodes=False)
+    loader.load_json(f"data/{test[8]}.json")
+    #viz.plot_model(show_nodes=False)
 
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
 
@@ -50,14 +50,17 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     optimizer.pre_snap_nodes(0.5*MAX_DISTANCE) #hago un agrupamiento de nodos, ahora con una tolerancia menor
 
-    #viz.plot_model(show_nodes=True, show_grids=True)
+    modelo.grid_manager.cleanup_unused_grids(tolerance=0.1)  #Elimino las grillas que no tienen elementos asigandos
+    modelo.grid_manager.rename_grids()  #renombro las grillsa
+    viz.plot_model(show_nodes=False,show_grids=True)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
     etabs_model.connect_active_etabs()
     etabs_model._write_stories()
-    
+    etabs_model._write_grids()
+    etabs_model._write_elements()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 

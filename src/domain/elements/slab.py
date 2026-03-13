@@ -15,6 +15,20 @@ class SlabElement(StructuralElement):
         return f"Slab con {len(self.nodes)}"
 
     def to_etabs_command(self, sap_model):
-        # La API de ETABS usa oAPI.SapModel.AreaObj.AddByPoint
-        node_names = [str(n.id) for n in self.nodes]
-        print(f"Enviando a ETABS: Area {self.section} con nodos {node_names}")
+        """
+        Genera el comando AddByCoord para ETABS.
+        """
+        n_nodes = len(self.nodes)
+        
+        # Extraemos las coordenadas como tuplas para la API
+        x_coords = [round(n.x, 4) for n in self.nodes]
+        y_coords = [round(n.y, 4) for n in self.nodes]
+        z_coords = [round(n.z, 4) for n in self.nodes]
+        
+        # Formato: AddByCoord(NumberPoints, X, Y, Z, Name, PropName, UserName)
+        # Dejamos el nombre vacío ("") para que ETABS asigne uno automático
+        #temporalemnte definire la seccion con M-20 para pruebas, luego sera self.Section
+        section="B025-Depto-15"
+        ret = sap_model.AreaObj.AddByCoord(n_nodes, x_coords, y_coords, z_coords, "", section)
+
+        return ret

@@ -204,8 +204,8 @@ class GridFactory:
             prefix = string.ascii_uppercase[system_count] if system_count < 26 else f"S{system_count}"
 
             theta=theta = np.radians((ang + 90))
-            dx=round(self.master_grids[ang][0]* np.cos(theta),round_decimal)
-            dy=round(self.master_grids[ang][0]* np.sin(theta),round_decimal)
+            dx=0 #round(self.master_grids[ang][0]* np.cos(theta),round_decimal)
+            dy=0 #round(self.master_grids[ang][0]* np.sin(theta),round_decimal)
             angle=ang
             new_system = self.model.grid_manager.add_system(name=system_name, prefix=prefix,dx=dx,dy=dy,angle=angle)
             

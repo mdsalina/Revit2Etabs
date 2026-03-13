@@ -25,7 +25,6 @@ class EtabsWriter:
         except Exception as e:
             raise ConnectionError("No se pudo conectar a ETABS. Asegúrate de que ETABS esté abierto.") from e
 
-
     def connect_new_etabs(self):
         """Inicia una instancia de ETABS y obtiene el modelo de SAP."""
         try:
@@ -64,6 +63,11 @@ class EtabsWriter:
         logger.info("Definiendo pisos...")
         self.model.story_manager.to_etabs_commands(self.SapModel)
 
+    def _write_grids(self):
+        logger.info("Definiendo sistemas de grillas...")
+        self.model.grid_manager.gridSystems_to_etabs(self.SapModel)
+        self.model.grid_manager.gridLines_to_etabs(self.SapModel)
+
     def _write_sections(self):
         print("Definiendo secciones...")
         for sec_name, sec_data in self.model.sections.items():
@@ -86,12 +90,19 @@ class EtabsWriter:
             # pero definirlos primero te da control total.
 
     def _write_elements(self):
-        print("Dibujando elementos...")
         # Iteramos sobre las vigas del modelo
         for beam in self.model.beams:
             # Aquí es donde el polimorfismo que diseñamos brilla.
             # Le pasamos el SapModel al elemento para que él mismo se dibuje.
             beam.to_etabs_command(self.SapModel)
-            
+        
+        for column in self.model.columns:
+            column.to_etabs_command(self.SapModel)
+
         for wall in self.model.walls:
             wall.to_etabs_command(self.SapModel)
+        
+        for slab in self.model.slabs:
+            slab.to_etabs_command(self.SapModel)
+        
+        self.SapModel.View.RefreshView(0,False)
