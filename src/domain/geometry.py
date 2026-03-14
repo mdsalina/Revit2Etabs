@@ -17,6 +17,7 @@ class NodeManager:
         self.nodes = {}  # Llave: (x, y, z) redondeados, Valor: objeto Node
         self.tolerance = tolerance
         self._next_id = 1
+        self.node_angles = {} # Diccionario: {node_id: set([angulo1, angulo2, ...])}
 
     def _generate_key(self, x, y, z):
         """
@@ -79,9 +80,26 @@ class NodeManager:
             else:
                 # Si ya hay un nodo en esa posición, registramos que 
                 # este 'old_node' debe ser reemplazado por el que ya existe
-                mapping[old_node.id] = new_nodes_dict[key]
+                target_node = new_nodes_dict[key]
+                mapping[old_node.id] = target_node
+                
+                # Fusionar ángulos del nodo viejo al nodo principal
+                if old_node.id in self.node_angles:
+                    if target_node.id not in self.node_angles:
+                        self.node_angles[target_node.id] = set()
+                    self.node_angles[target_node.id].update(self.node_angles.pop(old_node.id))
                 
         self.nodes = new_nodes_dict
         return mapping
 
+    def register_connection(self, node_id, angle):
+        """Registra que un ángulo de elemento pasa por este nodo."""
+        if node_id not in self.node_angles:
+            self.node_angles[node_id] = set()
+        # Normalizamos el ángulo a [0, 180) para consistencia con Hesse
+        if angle not in self.node_angles[node_id]: #Evita que se repitan los ángulos
+            self.node_angles[node_id].add(round(angle % 180, 2))
+
+    def get_connected_angles(self, node_id):
+        return self.node_angles.get(node_id, set())
         

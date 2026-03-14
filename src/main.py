@@ -32,7 +32,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[8]}.json")
+    loader.load_json(f"data/{test[7]}.json")
     #viz.plot_model(show_nodes=False)
 
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
@@ -52,7 +52,7 @@ def run_pipeline():
 
     modelo.grid_manager.cleanup_unused_grids(tolerance=0.1)  #Elimino las grillas que no tienen elementos asigandos
     modelo.grid_manager.rename_grids()  #renombro las grillsa
-    viz.plot_model(show_nodes=False,show_grids=True)
+    viz.plot_model(show_nodes=True,show_grids=True)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")

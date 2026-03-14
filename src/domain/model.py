@@ -41,6 +41,10 @@ class Model:
         
         beam = FrameElement(revit_id, section, level, n1, n2)
         self.beams.append(beam)
+        self.node_manager.register_connection(n1.id, round(beam.get_angle() % 180, 2))
+        self.node_manager.register_connection(n2.id, round(beam.get_angle() % 180, 2))
+        self.node_manager.register_connection(n1.id, round((beam.get_angle()+90) % 180, 2))
+        self.node_manager.register_connection(n2.id, round((beam.get_angle()+90) % 180, 2))
         return beam
 
     def add_column(self, revit_id, section, level, p1, p2):
@@ -51,6 +55,10 @@ class Model:
         
         col = FrameElement(revit_id, section, level, n1, n2)
         self.columns.append(col)
+        self.node_manager.register_connection(n1.id,0)
+        self.node_manager.register_connection(n2.id,0)
+        self.node_manager.register_connection(n1.id,90)
+        self.node_manager.register_connection(n2.id,90)
         return col
 
     def add_wall(self, revit_id, exterior_pts, holes_pts, section, level, height):
@@ -72,8 +80,16 @@ class Model:
         for elem in new_elements:
             if isinstance(elem, WallElement):
                 self.walls.append(elem)
+                for nodo in elem.nodes:
+                    self.node_manager.register_connection(nodo.id, round(elem.get_angle() % 180, 2))
+                    self.node_manager.register_connection(nodo.id, round((elem.get_angle()+90) % 180, 2))
+
             elif isinstance(elem, FrameElement):
                 self.beams.append(elem)
+                self.node_manager.register_connection(elem.n1.id, round(elem.get_angle() % 180, 2))
+                self.node_manager.register_connection(elem.n2.id, round(elem.get_angle() % 180, 2))
+                self.node_manager.register_connection(elem.n1.id, round((elem.get_angle()+90) % 180, 2))
+                self.node_manager.register_connection(elem.n2.id, round((elem.get_angle()+90) % 180, 2))
         
         return new_elements
     

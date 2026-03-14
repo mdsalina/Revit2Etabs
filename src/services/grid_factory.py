@@ -113,41 +113,49 @@ class GridFactory:
 
     def snap_nodes(self, max_distance=0.10):
         """
-        Punto E/F: Desplaza los nodos del modelo hacia las intersecciones de las
-        grillas maestras más influyentes.
-        max_distance: Tolerancia en metros para considerar que un nodo pertenece a una grilla.
+        Snap inteligente: Solo atrae nodos a intersecciones de grillas
+        cuyos ángulos coincidan con los elementos conectados al nodo.
         """
         nodes_moved = 0
-        
-        # Iteramos sobre los objetos Node reales del NodeManager
-        for node in self.model.node_manager.nodes.values():
-            associated_grids = []
-            
-            # 1. Identificar qué grillas maestras 'reclaman' a este nodo
-            for ang, rhos in self.master_grids.items():
+        node_manager = self.model.node_manager
+
+        for node in node_manager.nodes.values():
+            # 1. Obtener ángulos de elementos reales conectados a este nodo
+            connected_angles = node_manager.get_connected_angles(node.id)
+            if len(connected_angles) < 2:
+                continue # No hay intersección posible con un solo ángulo
+
+            # 2. Mapear ángulos de elementos a los ángulos maestros de grillas
+            relevant_master_angles = set()
+            for c_ang in connected_angles:
+                # Buscamos el ángulo maestro más cercano (ej: 0.02 -> 0.0)
+                best_master = min(self.master_grids.keys(), 
+                                  key=lambda m: min(abs(m - c_ang), abs(180 - abs(m - c_ang))))
+                relevant_master_angles.add(best_master)
+
+            # 3. Buscar las mejores grillas candidatas SOLO dentro de los ángulos relevantes
+            candidate_grids = []
+            for ang in relevant_master_angles:
+                rhos = self.master_grids[ang]
                 rho_node = self._calculate_rho(node.x, node.y, ang)
                 
-                # Buscamos el rho maestro más cercano para este ángulo
+                # Encontrar el rho maestro más cercano para este ángulo específico
                 closest_rho = min(rhos, key=lambda r: abs(r - rho_node))
                 
-                # Verificamos si está dentro del umbral (ej. 10 cm)
                 if abs(closest_rho - rho_node) <= max_distance:
-                    associated_grids.append((ang, closest_rho))
-                    #print(f"Nodo {node.id}, coordenadas ({node.x},{node.y}) asociado a grilla {ang} con rho {closest_rho}, distancia {abs(closest_rho - rho_node)}")
+                    candidate_grids.append((ang, closest_rho))
 
-
-            # 2. Si el nodo está en la intersección de al menos 2 grillas maestras
-            if len(associated_grids) >= 2:
-                # Ordenamos por cercanía para usar las 2 grillas más 'fuertes'
-                associated_grids.sort(key=lambda g: abs(g[1] - self._calculate_rho(node.x, node.y, g[0])))
+            # 4. Resolver intersección solo si tenemos al menos 2 grillas relevantes
+            if len(candidate_grids) >= 2:
+                # Si hay más de 2 (raro pero posible), tomamos las 2 más cercanas
+                candidate_grids.sort(key=lambda g: abs(g[1] - self._calculate_rho(node.x, node.y, g[0])))
                 
-                # Resolvemos la intersección de las dos mejores candidatas
-                new_x, new_y = self._intersect_lines(associated_grids[0], associated_grids[1])
+                new_x, new_y = self._intersect_lines(candidate_grids[0], candidate_grids[1])
                 
                 if new_x is not None:
                     node.x, node.y = new_x, new_y
                     nodes_moved += 1
-
+                    
         logger.info(f"Snap completado: {nodes_moved} nodos ajustados a la grilla maestra.")
 
     def _intersect_lines(self, g1, g2):
