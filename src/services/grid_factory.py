@@ -121,6 +121,9 @@ class GridFactory:
 
         for node in node_manager.nodes.values():
             # 1. Obtener ángulos de elementos reales conectados a este nodo
+            if node.id==3431 or node.id==2096 or node.id==2095:
+                print(node_manager.get_connected_angles(node.id))
+
             connected_angles = node_manager.get_connected_angles(node.id)
             if len(connected_angles) < 2:
                 continue # No hay intersección posible con un solo ángulo
@@ -155,6 +158,8 @@ class GridFactory:
                 if new_x is not None:
                     node.x, node.y = new_x, new_y
                     nodes_moved += 1
+            else:
+                print(f"No se encontraron grillas relevantes para el nodo {node.id}: x:{node.x}, y:{node.y}, relevant_master_angles:{relevant_master_angles}, candidate_grids:{candidate_grids}")
                     
         logger.info(f"Snap completado: {nodes_moved} nodos ajustados a la grilla maestra.")
 

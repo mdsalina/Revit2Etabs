@@ -53,10 +53,10 @@ class EtabsWriter:
 
         # EL ORDEN IMPORTA EN ETABS:
         # 1. Definir Materiales y Secciones
-        self._write_sections()
-        # 2. Definir Nodos (Joints)
-        self._write_nodes()
+        #self._write_sections()
         # 3. Definir Elementos (Frames, Shells)
+        self._write_stories()
+        self._write_grids()
         self._write_elements()
 
     def _write_stories(self):
@@ -69,7 +69,7 @@ class EtabsWriter:
         self.model.grid_manager.gridLines_to_etabs(self.SapModel)
 
     def _write_sections(self):
-        print("Definiendo secciones...")
+        logger.info("Definiendo secciones...")
         for sec_name, sec_data in self.model.sections.items():
             # Aquí usarías comandos como:
             # self.SapModel.PropFrame.SetRectangle(sec_name, "CONC", h, w)
@@ -77,7 +77,7 @@ class EtabsWriter:
             print(f"API: Definiendo sección {sec_name}")
 
     def _write_nodes(self):
-        print("Dibujando nodos...")
+        logger.info("Dibujando nodos...")
         for node in self.model.node_manager.nodes.values():
             # En ETABS, los nodos se crean por coordenadas
             # Retorna el nombre asignado por ETABS al nodo
@@ -90,18 +90,24 @@ class EtabsWriter:
             # pero definirlos primero te da control total.
 
     def _write_elements(self):
+        
         # Iteramos sobre las vigas del modelo
+        logger.info("Dibujando vigas...")
         for beam in self.model.beams:
             # Aquí es donde el polimorfismo que diseñamos brilla.
             # Le pasamos el SapModel al elemento para que él mismo se dibuje.
             beam.to_etabs_command(self.SapModel)
         
+        logger.info("Dibujando Columnas...")
         for column in self.model.columns:
             column.to_etabs_command(self.SapModel)
 
+        logger.info("Dibujando Muros...")
         for wall in self.model.walls:
-            wall.to_etabs_command(self.SapModel)
+            espesor=self.model.sections[wall.section].thickness
+            wall.to_etabs_command(self.SapModel,espesor)
         
+        logger.info("Dibujando Losas...")
         for slab in self.model.slabs:
             slab.to_etabs_command(self.SapModel)
         

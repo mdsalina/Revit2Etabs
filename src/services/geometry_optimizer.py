@@ -62,11 +62,34 @@ class GeometryOptimizer:
     def pre_snap_nodes(self, tolerance=0.02):
         """
         Une nodos que están muy cerca antes de procesar grillas.
-       
+        Actualiza las referencias de los nodos en todos los elementos estructurales.
         """
         # Reutilizamos la lógica de reindexación con una tolerancia mayor
         mapping = self.model.node_manager.reindex(tolerance=tolerance)
-        logger.info(f"Pre-Snap: {len(mapping)} nodos fusionados.")
+        
+        # Debemos actualizar las referencias dentro de los elementos
+        if mapping:
+            for element in self.model.beams + self.model.columns + self.model.walls + self.model.slabs:
+                if hasattr(element, 'nodes'):
+                    # Muros y losas
+                    for i in range(len(element.nodes)):
+                        if element.nodes[i].id in mapping:
+                            element.nodes[i] = mapping[element.nodes[i].id]
+                    # Update start_node and end_node for walls if they exist
+                    if hasattr(element, 'start_node') and element.start_node and element.start_node.id in mapping:
+                        element.start_node = mapping[element.start_node.id]
+                    if hasattr(element, 'end_node') and element.end_node and element.end_node.id in mapping:
+                        element.end_node = mapping[element.end_node.id]
+                else:
+                    # Vigas y columnas
+                    if element.start_node.id in mapping:
+                        element.start_node = mapping[element.start_node.id]
+                        element.n1 = element.start_node
+                    if element.end_node.id in mapping:
+                        element.end_node = mapping[element.end_node.id]
+                        element.n2 = element.end_node
+                        
+        logger.info(f"Pre-Snap: {len(mapping)} nodos fusionados y actualizados en elementos.")
 
     def _transform_grid_systems(self, dx, dy, alpha_deg):
         """Ajusta las grillas existentes a la nueva posición del modelo."""
@@ -101,3 +124,77 @@ class GeometryOptimizer:
             del self.model.node_manager.nodes[key]
     
         logger.info(f"Limpieza: Se eliminaron {len(orphans_keys)} nodos huérfanos.")
+
+    def remove_elements_below_base(self, tolerance=0.01):
+        """
+        Elimina elementos que están situados bajo el nivel más bajo definido.
+       
+        """
+        if not self.model.story_manager.stories:
+            return
+
+        # 1. Obtener la elevación mínima del StoryManager
+        min_story_elev = min(s.elevation for s in self.model.story_manager.stories)
+        
+        def is_below(element):
+            # Obtenemos todos los nodos del elemento (independiente de si es Wall o Frame)
+            nodes = element.nodes if hasattr(element, 'nodes') else [element.start_node, element.end_node]
+            # Verificamos si TODOS los nodos están por debajo o en el nivel base
+            return all(n.z <= min_story_elev + tolerance for n in nodes)
+
+        # 2. Filtrar las listas del modelo
+        initial_count = len(self.model.beams) + len(self.model.walls) + len(self.model.slabs)
+        
+        self.model.beams = [b for b in self.model.beams if not is_below(b)]
+        self.model.walls = [w for w in self.model.walls if not is_below(w)]
+        self.model.slabs = [s for s in self.model.slabs if not is_below(s)]
+        self.model.columns = [c for c in self.model.columns if not is_below(c)]
+
+        final_count = len(self.model.beams) + len(self.model.walls) + len(self.model.slabs)
+        logger.info(f"GeometryOptimizer: Se eliminaron {initial_count - final_count} elementos bajo la cota base.")
+
+    def snap_z_to_levels(self, tolerance=0.05):
+        """
+        Ajusta la coordenada Z de los nodos a las cotas de los niveles 
+        si están dentro del rango de tolerancia.
+        """
+        if not self.model.story_manager.stories:
+            return
+
+        stories_elevs = [s.elevation for s in self.model.story_manager.stories]
+        nodes_snapped = 0
+
+        for node in self.model.node_manager.nodes.values():
+            for s_elev in stories_elevs:
+                dist = abs(node.z - s_elev)
+                
+                if dist < tolerance and dist > 1e-6: # Evitamos procesar si ya está en la cota
+                    node.z = s_elev
+                    nodes_snapped += 1
+                    break # Una vez ajustado a un nivel, pasamos al siguiente nodo
+
+        logger.info(f"GeometryOptimizer: Se ajustaron {nodes_snapped} nodos verticalmente a niveles.")
+
+    def remove_short_walls(self, min_height=0.20):
+        """
+        Elimina los muros cuya altura vertical sea menor al umbral definido.
+       
+        """
+        initial_count = len(self.model.walls)
+        
+        def get_height(wall):
+            # Extraemos las coordenadas Z de todos los nodos del muro
+            z_coords = [n.z for n in wall.nodes]
+            if not z_coords:
+                return 0.0
+            return max(z_coords) - min(z_coords)
+
+        # Filtramos la lista de muros del modelo
+        self.model.walls = [
+            w for w in self.model.walls 
+            if get_height(w) >= min_height
+        ]
+        
+        removed = initial_count - len(self.model.walls)
+        if removed > 0:
+            logger.info(f"GeometryOptimizer: Se eliminaron {removed} muros por altura insuficiente (< {min_height}m).")    

@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from shapely.geometry import Polygon, box, MultiPolygon, GeometryCollection, LineString
+from shapely.ops import split
 
 class BaseShellProcessor(ABC):
     def __init__(self, model):
         self.model = model
         self._current_transform = None
+        self.should_split_by_levels = False # Por defecto desactivado
 
     def process_element(self, original_element):
         """Pipeline común para cualquier Shell (Muro o Losa)."""
@@ -15,6 +17,9 @@ class BaseShellProcessor(ABC):
         # 2. Pipeline de Shapely (el que ya definiste)
         rects_2d = self._run_shapely_pipeline(poly_2d)
         
+        if self.should_split_by_levels:
+            rects_2d = self._apply_level_splitting(rects_2d)
+
         # 3. Creación de elementos específicos (Delegado a las hijas)
         new_elements = []
         for rect in rects_2d:
@@ -217,3 +222,31 @@ class BaseShellProcessor(ABC):
             fusionados.append(box(cur_minx, miny, cur_maxx, maxy))
 
         return fusionados
+
+    def _apply_level_splitting(self, rects):
+        """Rebana los rectángulos 2D usando las elevaciones de los niveles."""
+        if not self.model.story_manager.stories: return rects
+        
+        origin_z = self._current_transform[0][2] # Elevación del origen local
+        
+        # Convertimos elevaciones globales a coordenadas V locales
+        level_v_coords = [(s.elevation - origin_z) for s in self.model.story_manager.stories]
+        
+        split_rects = []
+        for poly in rects:
+            min_u, min_v, max_u, max_v = poly.bounds
+            temp_list = [poly]
+            
+            for v_cut in level_v_coords:
+                # Solo cortamos si el nivel está dentro del rango del polígono
+                if min_v + 1e-4 < v_cut < max_v - 1e-4:
+                    new_temp = []
+                    cutter = LineString([(min_u - 1, v_cut), (max_u + 1, v_cut)])
+                    for p in temp_list:
+                        result = split(p, cutter)
+                        new_temp.extend([geom for geom in result.geoms if isinstance(geom, Polygon)])
+                    temp_list = new_temp
+            
+            split_rects.extend(temp_list)
+        
+        return split_rects

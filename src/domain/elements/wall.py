@@ -11,7 +11,6 @@ class WallElement(StructuralElement):
         self.nodes = nodes # Lista de objetos Node [n1, n2, n3, n4]
         self.get_start_node_end_node()
 
-        
     def get_start_node_end_node(self):
         #tomo solo las corrdenadas x e y de los nodos y defino start_node como el más cercano a 0,0 y end_node como el más lejano
         
@@ -34,7 +33,7 @@ class WallElement(StructuralElement):
     def get_geometry_summary(self):
         return f"Wall con {len(self.nodes)}"
 
-    def to_etabs_command(self, sap_model):
+    def to_etabs_command(self, sap_model,espesor):
         """
         Genera el comando AddByCoord para ETABS.
         """
@@ -48,7 +47,8 @@ class WallElement(StructuralElement):
         # Formato: AddByCoord(NumberPoints, X, Y, Z, Name, PropName, UserName)
         # Dejamos el nombre vacío ("") para que ETABS asigne uno automático
         #temporalemnte definire la seccion con M-20 para pruebas, luego sera self.Section
-        section="M-20"
+        #trunco el valor de espesor para que no tenga decimales
+        section=f"M-{int(espesor*100)}"
         ret = sap_model.AreaObj.AddByCoord(n_nodes, x_coords, y_coords, z_coords, "", section)
 
         return ret

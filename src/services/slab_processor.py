@@ -2,6 +2,10 @@ from .BaseShellProcessor import BaseShellProcessor
 from domain.elements.slab import SlabElement
 
 class SlabProcessor(BaseShellProcessor):
+    def __init__(self, model):
+        super().__init__(model)
+        self.should_split_by_levels = False # Las losas no se rebanan
+        
     def _create_structural_element(self, rect_poly, parent_slab):
         # Para losas, simplemente convertimos el rectángulo 2D a un Wall 3D
         u_coords, v_coords = rect_poly.exterior.coords.xy

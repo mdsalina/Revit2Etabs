@@ -3,6 +3,10 @@ from domain.elements.wall import WallElement
 from domain.elements.frame import FrameElement
 
 class WallProcessor(BaseShellProcessor):
+    def __init__(self, model):
+        super().__init__(model)
+        self.should_split_by_levels = True # Los muros se dividen 
+        
     def _create_structural_element(self, rect_poly, parent_wall):
         """
         Analiza el rectángulo 2D, lo convierte a 3D y decide 
@@ -19,11 +23,13 @@ class WallProcessor(BaseShellProcessor):
         
         # Eliminamos el último punto porque Shapely cierra el polígono (P5 = P1)
         nodes_3d = nodes_3d[:-1]
-        
+        z_coords = [n.z for n in nodes_3d]
+        z_max = max(z_coords)
+        level_name = self.model.story_manager.get_level_at(z_max)
         return WallElement(
             revit_id=parent_wall.revit_id,
             section=parent_wall.section,
-            level=parent_wall.level,
+            level=level_name,
             nodes=nodes_3d
         )
     

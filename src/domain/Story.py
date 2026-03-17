@@ -44,6 +44,16 @@ class StoryManager:
         """Altura máxima del edificio."""
         return self.stories[-1].elevation if self.stories else 0.0
 
+    def get_story_by_id(self, story_id):
+        """
+        Busca un piso por su id (en metros).
+        Útil para saber qué piso está pisando una losa.
+        """
+        for s in self.stories:
+            if s.id == story_id:
+                return s
+        return None
+
     def get_story_by_elevation(self, elevation):
         """
         Busca un piso por su elevación (en metros).
@@ -70,6 +80,28 @@ class StoryManager:
         """Aplica el desplazamiento a todos los niveles registrados."""
         for story in self.stories:
             story.elevation += dz
+
+    def get_level_at(self, z_coord):
+        """
+        Busca el nivel más adecuado para una coordenada Z dada.
+        Prioriza el nivel inmediatamente superior (convención ETABS),
+        pero ajusta por proximidad si está fuera de rangos.
+        """
+        if not self.stories:
+            return "Default_Story"
+
+        # Aseguramos que estén ordenados por elevación
+        sorted_stories = sorted(self.stories, key=lambda s: s.elevation)
+
+        # 1. Lógica de "Piso": Si Z está entre el nivel i-1 e i, pertenece al nivel i.
+        # Añadimos una tolerancia de 1cm (0.01m) para evitar errores de precisión
+        for story in sorted_stories:
+            if z_coord <= story.elevation + 0.01:
+                return story.name
+
+        # 2. Caso borde: Si la cota está por encima del último nivel (ej. un pretil)
+        # se asigna al último nivel disponible.
+        return sorted_stories[-1].name
 
     def to_etabs_commands(self,etabs_model):
         """
