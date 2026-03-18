@@ -94,12 +94,37 @@ class NodeManager:
 
     def register_connection(self, node_id, angle):
         """Registra que un ángulo de elemento pasa por este nodo."""
-        if node_id not in self.node_angles:
-            self.node_angles[node_id] = set()
-        # Normalizamos el ángulo a [0, 180) para consistencia con Hesse
-        if angle not in self.node_angles[node_id]: #Evita que se repitan los ángulos
-            self.node_angles[node_id].add(round(angle % 180, 2))
+        if node_id not in self.node_angles: #si no esta registrado el nodo anteriormente
+            self.node_angles[node_id] = set() #La principal ventaja de usar un set() en lugar de una lista normal ([]) es su naturaleza matemática de conjunto: si intentas agregar un valor que ya existe usando .add(), simplemente lo ignora.
+        
+        normalized_angle = round(angle % 180, 2)
+        self.node_angles[node_id].add(normalized_angle)
 
     def get_connected_angles(self, node_id):
-        return self.node_angles.get(node_id, set())
+        return self.node_angles.get(node_id, set()) #si no lo encuentra devuelve un conjunto vacio
+
+    def propagate_vertical_angles(self):
+        """
+        Unifica los ángulos de todos los nodos que se encuentran sobre 
+        la misma vertical (mismas coordenadas X, Y).
+        """
+        # 1. Agrupar IDs de nodos por su coordenada (X, Y)
+        vertical_groups = {} # Llave: (x_round, y_round), Valor: lista de node_ids
+        prec = len(str(self.tolerance).split('.')[-1])
         
+        for node in self.nodes.values():
+            xy_key = (round(node.x, prec), round(node.y, prec))
+            if xy_key not in vertical_groups:
+                vertical_groups[xy_key] = []
+            vertical_groups[xy_key].append(node.id)
+            
+        # 2 y 3. Unir los ángulos de cada grupo y reasignarlos a todos sus nodos
+        for xy_key, node_ids in vertical_groups.items():
+            unified_angles = set()
+            for n_id in node_ids:
+                if n_id in self.node_angles:
+                    unified_angles.update(self.node_angles[n_id])
+            
+            if unified_angles:
+                for n_id in node_ids:
+                    self.node_angles[n_id] = set(unified_angles)

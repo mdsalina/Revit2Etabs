@@ -33,6 +33,10 @@ def run_pipeline():
 
     logger.info("Cargando datos...")
     loader.load_json(f"data/{test[7]}.json")
+    
+    logger.info("Propagando ángulos verticalmente...")
+    modelo.node_manager.propagate_vertical_angles()
+    
     #viz.plot_model(show_nodes=False)
 
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
