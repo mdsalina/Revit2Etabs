@@ -26,14 +26,28 @@ class GridFactory:
         if not elements: return []
 
         raw_angles = [e.get_angle() for e in elements]
-        X = np.radians(np.array(raw_angles).reshape(-1, 1))
         
-        db = DBSCAN(eps=np.radians(eps_deg), min_samples=1).fit(X)
+        n = len(raw_angles)
+        dist_matrix = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i+1, n):
+                diff = abs(raw_angles[i] - raw_angles[j])
+                d = min(diff, 180 - diff)
+                dist_matrix[i, j] = d
+                dist_matrix[j, i] = d
+        
+        min_samples=int(len(elements)*0.05) #al menos el 5% de los elementos deben tener el mismo ángulo para ser considerados como un ángulo maestro
+        db = DBSCAN(eps=eps_deg, min_samples=min_samples, metric='precomputed').fit(dist_matrix) #agrupa los ángulos que están a una distancia menor a eps_deg y les pone etiqueta
         
         found_masters = []
-        for label in set(db.labels_):
-            cluster_data = np.degrees(X[db.labels_ == label])
-            median_angle = np.median(cluster_data) % 180
+        for label in set(db.labels_): #extraigo los elementos para cada etiqueta (o grupo)
+            cluster_indices = np.where(db.labels_ == label)[0]
+            cluster_data = [raw_angles[i] for i in cluster_indices]
+            
+            #calculo el ángulo promedio del grupo
+            x_sum = sum(np.cos(np.radians(2 * a)) for a in cluster_data)
+            y_sum = sum(np.sin(np.radians(2 * a)) for a in cluster_data)
+            median_angle = (np.degrees(np.arctan2(y_sum, x_sum)) / 2) % 180
             
             final_angle = median_angle
             
@@ -77,7 +91,7 @@ class GridFactory:
         for elem in elements:
             # Buscamos el ángulo maestro más cercano al del elemento
             e_ang = elem.get_angle()
-            m_ang = min(self.master_angles, key=lambda x: abs(x - e_ang)) # Encuentra el ángulo maestro más cercano al ángulo del elemento
+            m_ang = min(self.master_angles, key=lambda x: min(abs(x - e_ang), 180 - abs(x - e_ang))) # Encuentra el ángulo maestro más cercano al ángulo del elemento
             p_ang = (m_ang + 90) % 180 # Ángulo perpendicular
 
             p1 = elem.start_node
@@ -159,7 +173,7 @@ class GridFactory:
                     node.x, node.y = new_x, new_y
                     nodes_moved += 1
             else:
-                print(f"No se encontraron grillas relevantes para el nodo {node.id}: x:{node.x}, y:{node.y}, relevant_master_angles:{relevant_master_angles}, candidate_grids:{candidate_grids}")
+                print(f"No se encontraron grillas relevantes para el nodo {node.id}: x:{node.x}, y:{node.y} z:{node.z}, relevant_master_angles:{relevant_master_angles}, candidate_grids:{candidate_grids}, distancia minima: {abs(closest_rho - rho_node)} ")
                     
         logger.info(f"Snap completado: {nodes_moved} nodos ajustados a la grilla maestra.")
 
@@ -210,7 +224,7 @@ class GridFactory:
 
             # 1. Buscar pareja ortogonal (90° de diferencia)
             target_perp = (ang + 90) % 180
-            perp_ang = next((a for a in angles if abs(a - target_perp) < eps_angle), None)
+            perp_ang = next((a for a in angles if min(abs(a - target_perp), 180 - abs(a - target_perp)) < eps_angle), None)
 
             # 2. Crear el Sistema de Grillas (G1, G2...)
             system_name = f"G{system_count + 1}"
