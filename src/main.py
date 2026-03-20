@@ -58,7 +58,7 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     #optimizer.pre_snap_nodes(0.5*MAX_DISTANCE) #hago un agrupamiento de nodos, ahora con una tolerancia menor
 
-    #modelo.grid_manager.cleanup_unused_grids(tolerance=0.1)  #Elimino las grillas que no tienen elementos asigandos
+    modelo.grid_manager.cleanup_unused_grids(tolerance=0.1)  #Elimino las grillas que no tienen elementos asigandos
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     viz.plot_model(show_nodes=True,show_grids=True)
      

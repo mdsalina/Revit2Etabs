@@ -140,16 +140,16 @@ class Model:
         """Devuelve una lista de elementos conectados a un nodo"""
         elements = []
         if type_element == 'beam':
-            elements = [beam for beam in self.beams if beam.n1.id == node_id or beam.n2.id == node_id]
+            elements = [beam for beam in self.beams if beam.start_node.id == node_id or beam.end_node.id == node_id]
         elif type_element == 'column':
-            elements = [column for column in self.columns if column.n1.id == node_id or column.n2.id == node_id]
+            elements = [column for column in self.columns if column.start_node.id == node_id or column.end_node.id == node_id]
         elif type_element == 'wall':
             elements = [wall for wall in self.walls for node in wall.nodes if node.id == node_id]
         elif type_element == 'slab':
             elements = [slab for slab in self.slabs for node in slab.nodes if node.id == node_id]
         else:
-            elements = [beam for beam in self.beams if beam.n1.id == node_id or beam.n2.id == node_id]
-            elements += [column for column in self.columns if column.n1.id == node_id or column.n2.id == node_id]
+            elements = [beam for beam in self.beams if beam.start_node.id == node_id or beam.end_node.id == node_id]
+            elements += [column for column in self.columns if column.start_node.id == node_id or column.end_node.id == node_id]
             elements += [wall for wall in self.walls for node in wall.nodes if node.id == node_id]
             elements += [slab for slab in self.slabs for node in slab.nodes if node.id == node_id]
         return elements

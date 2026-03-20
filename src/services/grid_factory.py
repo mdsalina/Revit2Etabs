@@ -123,7 +123,7 @@ class GridFactory:
     def _cluster_rhos(self, rhos, eps):
         X = np.array(rhos).reshape(-1, 1)
         db = DBSCAN(eps=eps, min_samples=1).fit(X)
-        return [np.median(X[db.labels_ == l]) for l in set(db.labels_)]
+        return [np.mean(X[db.labels_ == l]) for l in set(db.labels_)]
 
     def snap_nodes(self, max_distance=0.10):
         """
@@ -135,9 +135,6 @@ class GridFactory:
 
         for node in node_manager.nodes.values():
             # 1. Obtener ángulos de elementos reales conectados a este nodo
-            if node.id==3431 or node.id==2096 or node.id==2095:
-                print(node_manager.get_connected_angles(node.id))
-
             connected_angles = node_manager.get_connected_angles(node.id)
             if len(connected_angles) < 2:
                 continue # No hay intersección posible con un solo ángulo
@@ -173,7 +170,16 @@ class GridFactory:
                     node.x, node.y = new_x, new_y
                     nodes_moved += 1
             else:
-                print(f"No se encontraron grillas relevantes para el nodo {node.id}: x:{node.x}, y:{node.y} z:{node.z}, relevant_master_angles:{relevant_master_angles}, candidate_grids:{candidate_grids}, distancia minima: {abs(closest_rho - rho_node)} ")
+                if len(candidate_grids) == 1: # muevo el nodo a la grilla mas cercana
+                    ang, rho_grid = candidate_grids[0]
+                    theta = np.radians((ang + 90) % 180)
+                    rho_node = self._calculate_rho(node.x, node.y, ang)
+                    d_rho = rho_grid - rho_node
+                    node.x += d_rho * np.cos(theta)
+                    node.y += d_rho * np.sin(theta)
+                    nodes_moved += 1
+                else:
+                    print(f"No se encontraron grillas relevantes para el nodo {node.id}: x:{round(node.x,3)}, y:{round(node.y,3)} z:{round(node.z,3)}, relevant_master_angles:{relevant_master_angles}, candidate_grids:{candidate_grids}, distancia minima: {round(abs(closest_rho - rho_node),2)}")
                     
         logger.info(f"Snap completado: {nodes_moved} nodos ajustados a la grilla maestra.")
 
