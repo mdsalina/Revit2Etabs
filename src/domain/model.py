@@ -123,8 +123,8 @@ class Model:
     def add_section(self, type_sec,name,material,params):
         if type_sec == 'Frame' and name not in self.sections:
             self.sections[name] = FrameSection(name, material, params.get('width',0.2), params.get('height',0.6))
-        elif type_sec == 'Shell' and name not in self.sections:
-            self.sections[name] = ShellSection(name, material, params.get('thickness',0.15))
+        elif type_sec == 'Wall' or type_sec == 'Slab' and name not in self.sections:
+            self.sections[name] = ShellSection(type_sec,name, material, params.get('thickness',0.15))
         else:
             print(f"La sección {name} ya existe en el modelo.")
     

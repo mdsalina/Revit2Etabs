@@ -3,6 +3,7 @@ import sys
 # Importamos comtypes para la comunicación con la API de ETABS
 import comtypes.client
 import logging
+from domain.sections import FrameSection, ShellSection
 
 logger = logging.getLogger("Revit2Etabs.Service.EtabsWriter")
 
@@ -55,6 +56,7 @@ class EtabsWriter:
         # 1. Definir Materiales y Secciones
         #self._write_sections()
         # 3. Definir Elementos (Frames, Shells)
+        self._write_sections()
         self._write_stories()
         self._write_grids()
         self._write_elements()
@@ -89,6 +91,11 @@ class EtabsWriter:
             # Tip pro: ETABS crea puntos automáticamente al crear líneas, 
             # pero definirlos primero te da control total.
 
+    def _write_sections(self):
+        logger.info("Definiendo secciones...")
+        for sec_name, sec_data in self.model.sections.items():
+            sec_data.to_etabs_command(self.SapModel)
+           
     def _write_elements(self):
         
         # Iteramos sobre las vigas del modelo
@@ -96,11 +103,15 @@ class EtabsWriter:
         for beam in self.model.beams:
             # Aquí es donde el polimorfismo que diseñamos brilla.
             # Le pasamos el SapModel al elemento para que él mismo se dibuje.
-            beam.to_etabs_command(self.SapModel)
+            sec_data = self.model.sections[beam.section]
+            section_name = f"V-{int(sec_data.width*100)}/{int(sec_data.height*100)}"
+            beam.to_etabs_command(self.SapModel, section_name)
         
         logger.info("Dibujando Columnas...")
         for column in self.model.columns:
-            column.to_etabs_command(self.SapModel)
+            sec_data = self.model.sections[column.section]
+            section_name = f"V-{int(sec_data.width*100)}/{int(sec_data.height*100)}"
+            column.to_etabs_command(self.SapModel, section_name)
 
         logger.info("Dibujando Muros...")
         for wall in self.model.walls:
@@ -109,6 +120,7 @@ class EtabsWriter:
         
         logger.info("Dibujando Losas...")
         for slab in self.model.slabs:
-            slab.to_etabs_command(self.SapModel)
+            espesor=self.model.sections[slab.section].thickness
+            slab.to_etabs_command(self.SapModel,espesor)
         
         self.SapModel.View.RefreshView(0,False)

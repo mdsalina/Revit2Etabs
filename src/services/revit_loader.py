@@ -6,8 +6,8 @@ from services.load_filter import LoadFilter
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 
 STORY_FILTER=None #["L1","L2","L3","L4","L5","L6","L7"]
-SECTION_FILTER=['WALL-BL-MURO-H-A-150MM','WALL-BL-MURO-H-A-200MM','WALL-BL-MURO-H-A-250MM','WALL-BL-MURO-H-A-300MM','WALL-BL-MURO-H-A-350MM','WALL-BL-MURO-H-A-400MM']
-CATEGORIES_FILTER=['walls','frames']
+SECTION_FILTER=None #['WALL-BL-MURO-H-A-150MM','WALL-BL-MURO-H-A-200MM','WALL-BL-MURO-H-A-250MM','WALL-BL-MURO-H-A-300MM','WALL-BL-MURO-H-A-350MM','WALL-BL-MURO-H-A-400MM']
+CATEGORIES_FILTER=None #['walls','frames']
 
 
 class RevitLoader:

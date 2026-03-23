@@ -10,7 +10,7 @@ from services.grid_factory import GridFactory
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq 2','Casa_BN']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq 2','Casa_BN_V2']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
@@ -32,7 +32,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[7]}.json")
+    loader.load_json(f"data/{test[8]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -60,7 +60,7 @@ def run_pipeline():
 
     modelo.grid_manager.cleanup_unused_grids(tolerance=0.1)  #Elimino las grillas que no tienen elementos asigandos
     modelo.grid_manager.rename_grids()  #renombro las grillsa
-    viz.plot_model(show_nodes=True,show_grids=True)
+    #viz.plot_model(show_nodes=True,show_grids=True)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")

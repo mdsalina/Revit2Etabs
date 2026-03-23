@@ -20,12 +20,12 @@ class FrameElement(StructuralElement):
     def get_geometry_summary(self):
         return f"Línea de {self.start_node.id} a {self.end_node.id}"
 
-    def to_etabs_command(self, sap_model):
+    def to_etabs_command(self, sap_model, section_name):
         """Llamada real a la API de ETABS para dibujar un Frame."""
         # Retorna (NombreElemento, Resultado)
         ret = sap_model.FrameObj.AddByCoord(
             self.start_node.x, self.start_node.y, self.start_node.z,
             self.end_node.x, self.end_node.y, self.end_node.z,
-            "", "V-20/30", "None"
+            "", section_name, "None"
         )
         return ret

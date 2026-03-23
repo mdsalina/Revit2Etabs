@@ -14,7 +14,7 @@ class SlabElement(StructuralElement):
     def get_geometry_summary(self):
         return f"Slab con {len(self.nodes)}"
 
-    def to_etabs_command(self, sap_model):
+    def to_etabs_command(self, sap_model,espesor):
         """
         Genera el comando AddByCoord para ETABS.
         """
@@ -28,7 +28,7 @@ class SlabElement(StructuralElement):
         # Formato: AddByCoord(NumberPoints, X, Y, Z, Name, PropName, UserName)
         # Dejamos el nombre vacío ("") para que ETABS asigne uno automático
         #temporalemnte definire la seccion con M-20 para pruebas, luego sera self.Section
-        section="B025-Depto-15"
+        section=f"L-{int(espesor*100)}"
         ret = sap_model.AreaObj.AddByCoord(n_nodes, x_coords, y_coords, z_coords, "", section)
 
         return ret
