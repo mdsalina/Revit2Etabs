@@ -184,3 +184,43 @@ class GeometryOptimizer:
         removed = initial_count - len(self.model.walls)
         if removed > 0:
             logger.info(f"GeometryOptimizer: Se eliminaron {removed} muros por altura insuficiente (< {min_height}m).")    
+
+    def divide_walls_by_vertical_lines(self):
+        """
+        Recorre todos los ejes del proyecto, toma los muros asociados a cada uno
+        y los procesa (funde y divide) para generar los muros analíticos finales.
+        """
+        from services.wall_processor import WallProcessor
+        from domain.elements.wall import WallElement
+        
+        wp = WallProcessor(self.model)
+        
+        new_walls_total = []
+        walls_to_remove = set()
+        
+        for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+            walls = [e for e in elements if isinstance(e, WallElement)]
+            if not walls:
+                continue
+                
+            # Pasamos todos los muros del eje por el procesador
+            new_walls = wp.process_elements_group(walls)
+            if new_walls:
+                new_walls_total.extend(new_walls)
+                for w in walls:
+                    walls_to_remove.add(w)
+                
+                # Actualizar el mapa de grillas para este eje
+                remaining_elements = [e for e in elements if e not in walls]
+                remaining_elements.extend(new_walls)
+                self.model.grid_manager.grid_elements_map[grid_label] = remaining_elements
+                    
+        # Actualizar el modelo
+        self.model.walls = [w for w in self.model.walls if w not in walls_to_remove]
+        self.model.walls.extend(new_walls_total)
+        
+        # Re-indexar los nodos en caso de que WallProcessor haya creado nuevos
+        self.model.node_manager.reindex()
+        
+        logger.info(f"GeometryOptimizer: Se optimizaron los muros por eje geométrico. "
+                    f"Muros originales procesados: {len(walls_to_remove)}, Muros resultantes generados: {len(new_walls_total)}.")

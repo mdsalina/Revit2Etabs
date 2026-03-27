@@ -64,33 +64,44 @@ class BaseShellProcessor(ABC):
         else:
             # --- LÓGICA PARA MUROS (Walls) ---
             # Para elementos verticales, proyectamos el alzado.
-            # U es la dirección de la base y V es el eje Z vertical.
-            p1 = pts[1]
-            vec_u = p1 - p0
-            vec_u[2] = 0  # Aseguramos que U sea puramente horizontal en el plano XY
-            mag = np.linalg.norm(vec_u)
+            # Buscamos el punto con mayor distancia horizontal desde p0 para definir el eje U
+            max_dist = 0
+            best_u = np.array([1.0, 0.0, 0.0])
+            
+            for p_i in pts[1:]:
+                vec = p_i - p0
+                vec[2] = 0  # Ignoramos la diferencia en Z
+                dist = np.linalg.norm(vec)
+                if dist > max_dist:
+                    max_dist = dist
+                    best_u = vec / dist
 
-            # Validación de seguridad para evitar divisiones por cero en muros puntuales
-            if mag < 1e-9:
+            if max_dist < 1e-9:
                 u_axis = np.array([1.0, 0.0, 0.0]) 
             else:
-                u_axis = vec_u / mag
+                u_axis = best_u
 
             v_axis = np.array([0.0, 0.0, 1.0])
             origin = p0
 
         return origin, u_axis, v_axis
 
-    def _project_to_2d(self, wall_element):
-        """
-        Convierte coordenadas 3D de Revit a 2D para Shapely.
-        """
-        coords_3d = wall_element.exterior_points # Lista de (x,y,z)
-        holes_3d = wall_element.holes_points     # Lista de listas de (x,y,z)
+    def _get_exterior_points(self, element):
+        if hasattr(element, 'exterior_points'):
+            return element.exterior_points
+        return [(n.x, n.y, n.z) for n in getattr(element, 'nodes', [])]
         
-        origin, u_axis, v_axis = self._get_local_axes(coords_3d)
+    def _get_holes_points(self, element):
+        if hasattr(element, 'holes_points'):
+            return element.holes_points
+        return []
+
+    def _project_element_with_transform(self, wall_element, transform):
+        origin, u_axis, v_axis = transform
+        coords_3d = self._get_exterior_points(wall_element)
+        holes_3d = self._get_holes_points(wall_element)
         
-        def transform(p_list):
+        def transform_pts(p_list):
             pts_2d = []
             for p in p_list:
                 rel_p = np.array(p, dtype=float) - origin
@@ -99,13 +110,72 @@ class BaseShellProcessor(ABC):
                 pts_2d.append((u, v))
             return pts_2d
 
-        poly_2d = Polygon(shell=transform(coords_3d), holes=[transform(h) for h in holes_3d])
+        poly_2d = Polygon(shell=transform_pts(coords_3d), holes=[transform_pts(h) for h in holes_3d])
+        return poly_2d
+
+    def _project_to_2d(self, wall_element):
+        """
+        Convierte coordenadas 3D de Revit a 2D para Shapely.
+        """
+        coords_3d = self._get_exterior_points(wall_element)
+        
+        origin, u_axis, v_axis = self._get_local_axes(coords_3d)
         
         # Guardamos la matriz de transformación para la desproyección
         self._current_transform = (origin, u_axis, v_axis)
         
-        return poly_2d
+        return self._project_element_with_transform(wall_element, self._current_transform)
 
+    def process_elements_group(self, original_elements, nodes_on_grid=None):
+        """
+        Procesa un grupo de elementos (Ej. todos los muros de un eje), unificando sus geometrías
+        en un plano 2D común antes de aplicar la división y generación de nuevos elementos.
+        """
+        if not original_elements:
+            return []
+            
+        from shapely.ops import unary_union
+        
+        # 1. Usar el primer elemento como base para definir el sistema de coordenadas local
+        base_element = original_elements[0]
+        self._project_to_2d(base_element) # Esto setea self._current_transform
+        origin, u_axis, v_axis = self._current_transform
+        
+        extra_xs = set()
+        if nodes_on_grid:
+            for n in nodes_on_grid:
+                rel_p = np.array([n.x, n.y, n.z]) - origin
+                u = np.dot(rel_p, u_axis)
+                extra_xs.add(round(u, 4))
+        
+        # 2. Proyectar todos los elementos al sistema local del base_element
+        polys_2d = []
+        for elem in original_elements:
+            poly = self._project_element_with_transform(elem, self._current_transform)
+            # Solución a fallos de precisión de punto flotante en aristas compartidas
+            polys_2d.append(poly.buffer(1e-4, cap_style=3, join_style=2))
+            
+        # Unificar polígonos
+        merged_poly = unary_union(polys_2d)
+        merged_poly = merged_poly.buffer(-1e-4, cap_style=3, join_style=2)
+        
+        # 3. Pipeline de Shapely
+        rects_2d = self._run_shapely_pipeline(merged_poly)
+        
+        if self.should_split_by_levels:
+            rects_2d = self._apply_level_splitting(rects_2d)
+            
+        if extra_xs:
+            rects_2d = self._apply_vertical_splitting(rects_2d, sorted(list(extra_xs)))
+            
+        # 4. Crear nuevos elementos estructurales, todos toman propiedades del base_element por defecto
+        new_elements = []
+        for rect in rects_2d:
+            element = self._create_structural_element(rect, base_element)
+            new_elements.append(element)
+            
+        return new_elements
+    
     def _back_to_3d(self, u, v):
         origin, u_axis, v_axis = self._current_transform
         p_3d = origin + (u * u_axis) + (v * v_axis)
@@ -250,3 +320,29 @@ class BaseShellProcessor(ABC):
             split_rects.extend(temp_list)
         
         return split_rects
+
+    def _apply_vertical_splitting(self, rects, extra_xs):
+        """Rebana los rectángulos 2D verticalmente en los puntos X especificados."""
+        if not extra_xs: return rects
+        
+        split_rects = []
+        for poly in rects:
+            min_u, min_v, max_u, max_v = poly.bounds
+            temp_list = [poly]
+            
+            for u_cut in extra_xs:
+                # Solo cortamos si el corte X está dentro del rango del polígono
+                if min_u + 1e-4 < u_cut < max_u - 1e-4:
+                    new_temp = []
+                    cutter = LineString([(u_cut, min_v - 1), (u_cut, max_v + 1)])
+                    for p in temp_list:
+                        result = split(p, cutter)
+                        new_temp.extend([geom for geom in result.geoms if isinstance(geom, Polygon)])
+                    temp_list = new_temp
+            
+            split_rects.extend(temp_list)
+        
+        return split_rects
+
+
+    
