@@ -187,6 +187,150 @@ class StructuralVisualizer:
         ax.set_ylim3d([np.mean(y_limits) - plot_radius, np.mean(y_limits) + plot_radius])
         ax.set_zlim3d([np.mean(z_limits) - plot_radius, np.mean(z_limits) + plot_radius])
     
+    def plot_grid(self, grid_label, show_nodes=False, show_grids=True, show_levels=True):
+        """
+        Grafica en 2D la elevación de un eje en específico.
+        """
+        # 1. Buscar la grilla por su label
+        grid_manager = self.model.grid_manager
+        target_grid = None
+        for system in grid_manager.systems:
+            for g in system.grids:
+                if g.label == grid_label:
+                    target_grid = g
+                    break
+            if target_grid:
+                break
+        
+        if not target_grid:
+            print(f"Error: No se encontró la grilla '{grid_label}'.")
+            return
+            
+        elements = grid_manager.grid_elements_map.get(grid_label, [])
+        if not elements:
+            print(f"Advertencia: No hay elementos mapeados a la grilla '{grid_label}'.")
+            
+        # Preparar la figura 2D
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Ángulo de la grilla principal
+        alpha_rad = np.radians(target_grid.angle_deg)
+        cos_a = np.cos(alpha_rad)
+        sin_a = np.sin(alpha_rad)
+        
+        # Función auxiliar para proyectar un nodo 3D al plano local 2D (H, Z)
+        def project_node(node):
+            H = node.x * cos_a + node.y * sin_a
+            return H, node.z
+
+        all_h = []
+        all_z = []
+        
+        # Graficar elementos
+        for elem in elements:
+            if elem in self.model.beams or elem in self.model.columns:
+                h1, z1 = project_node(elem.start_node)
+                h2, z2 = project_node(elem.end_node)
+                
+                is_col = elem in self.model.columns
+                color = 'green' if is_col else 'blue'
+                lw = 3 if is_col else 2
+                
+                ax.plot([h1, h2], [z1, z2], color=color, linewidth=lw)
+                
+                all_h.extend([h1, h2])
+                all_z.extend([z1, z2])
+                
+                if show_nodes:
+                    ax.scatter([h1, h2], [z1, z2], color='black', s=20, zorder=5)
+                    ax.text(h1, z1, str(elem.start_node.id), fontsize=7, color='darkred')
+                    ax.text(h2, z2, str(elem.end_node.id), fontsize=7, color='darkred')
+                    
+            elif elem in self.model.walls:
+                # Proyectar los nodos del muro
+                polygon_h = []
+                polygon_z = []
+                for n in elem.nodes:
+                    h, z = project_node(n)
+                    polygon_h.append(h)
+                    polygon_z.append(z)
+                    all_h.append(h)
+                    all_z.append(z)
+                    
+                    if show_nodes:
+                        ax.scatter([h], [z], color='black', s=20, zorder=5)
+                        ax.text(h, z, str(n.id), fontsize=7, color='darkred')
+                
+                if len(polygon_h) > 0:
+                    polygon_h.append(polygon_h[0])
+                    polygon_z.append(polygon_z[0])
+                    ax.plot(polygon_h, polygon_z, color='darkred', linewidth=1)
+                    ax.fill(polygon_h, polygon_z, color='red', alpha=0.3)
+        
+        # Graficar Niveles
+        if show_levels and hasattr(self.model, 'story_manager') and self.model.story_manager.stories:
+            h_min = min(all_h) if all_h else 0
+            h_max = max(all_h) if all_h else 10
+            
+            buffer = (h_max - h_min) * 0.1 if h_max > h_min else 2
+            h_min -= buffer
+            h_max += buffer
+            
+            for story in self.model.story_manager.stories:
+                z_lev = story.elevation
+                ax.axhline(y=z_lev, color='gray', linestyle='-.', linewidth=0.8, alpha=0.7)
+                ax.text(h_max, z_lev, f" {story.name} ({z_lev}m)", color='gray', va='bottom', fontsize=8)
+                all_z.append(z_lev)
+
+        # Graficar Grillas transversales
+        if show_grids:
+            z_min = min(all_z) if all_z else 0
+            z_max = max(all_z) if all_z else 10
+            
+            for g in grid_manager.get_all_grids():
+                # No graficar grillas paralelas
+                diff = abs((g.angle_deg % 180) - (target_grid.angle_deg % 180))
+                if min(diff, 180 - diff) < 1.0:
+                    continue
+                
+                # Intersección
+                t1 = np.radians((target_grid.angle_deg + 90) % 180)
+                t2 = np.radians((g.angle_deg + 90) % 180)
+                
+                A = np.array([
+                    [np.cos(t1), np.sin(t1)],
+                    [np.cos(t2), np.sin(t2)]
+                ])
+                b = np.array([target_grid.rho, g.rho])
+                
+                try:
+                    intersection = np.linalg.solve(A, b)
+                    H_int = intersection[0] * cos_a + intersection[1] * sin_a
+                    
+                    if all_h and (min(all_h)-5 <= H_int <= max(all_h)+5):
+                        ax.axvline(x=H_int, color='gray', linestyle=':', linewidth=0.8, alpha=0.7)
+                        ax.text(H_int, z_min - 1, f" {g.label}", color='gray', ha='center', va='top', fontsize=8, rotation=90)
+                except np.linalg.LinAlgError:
+                    pass
+
+        ax.set_aspect('equal', adjustable='datalim')
+        ax.set_title(f"Elevación Eje {grid_label}")
+        ax.set_xlabel("Distancia a lo largo del eje (m)")
+        ax.set_ylabel("Elevación Z (m)")
+        
+        # Leyenda manual
+        import matplotlib.patches as mpatches
+        import matplotlib.lines as mlines
+        handles = [
+            mlines.Line2D([], [], color='green', linewidth=3, label='Columna'),
+            mlines.Line2D([], [], color='blue', linewidth=2, label='Viga'),
+            mpatches.Patch(color='red', alpha=0.3, label='Muro')
+        ]
+        ax.legend(handles=handles, loc='upper right')
+        
+        plt.tight_layout()
+        plt.show()
+
     def _on_pick(self, event):
         """Manejador de evento cuando se hace clic en un punto del scatter."""
         if event.artist != self.scatter:

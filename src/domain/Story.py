@@ -19,6 +19,7 @@ class Story:
 class StoryManager:
     def __init__(self):
         self.stories = [] # Lista de objetos Story
+        self.dz=0.0
 
     def add_story(self, name, elevation, level_id):
         # 1. Verificación de duplicados
@@ -32,6 +33,9 @@ class StoryManager:
         # Siempre mantenemos los pisos ordenados por elevación
         self.stories.sort(key=lambda s: s.elevation)
 
+    def get_base_story(self):
+        """Obtiene el piso base del modelo."""
+        return self.stories[0]
     def get_story_height(self, story_id):
         """Calcula la altura de entrepiso respecto al nivel inferior."""
         for i, s in enumerate(self.stories):
@@ -76,10 +80,13 @@ class StoryManager:
         min_elevation = self.stories[0].elevation
         return -min_elevation
 
-    def apply_dz(self, dz):
-        """Aplica el desplazamiento a todos los niveles registrados."""
+    def apply_dz(self, dz,filter_stories=None):
+        """Aplica el desplazamiento a todos los niveles registrados. Se puede aplicar un filtro (lista de pisos a excluir)"""
+        self.dz=self.dz+dz
+        
         for story in self.stories:
-            story.elevation += dz
+            if filter_stories is None or story.name not in filter_stories:
+                story.elevation += dz
 
     def get_level_at(self, z_coord):
         """
@@ -107,7 +114,24 @@ class StoryManager:
         """
         Genera una lista de comandos para definir la estructura de pisos en ETABS.
         """
-        StoryNames = [f"P{i+1}" for i, story in enumerate(self.stories[1:])] # Elevación de cada piso (0 por defecto)
+
+        # busca el piso con elevación mas cercana a 0 (considerando qe los niveles fueron desplazados en dz)
+        closest_idx = 0
+        min_dist = float('inf')
+        for i, story in enumerate(self.stories):
+            local_elevation = story.elevation - self.dz
+            if abs(local_elevation) < min_dist:
+                min_dist = abs(local_elevation)
+                closest_idx = i
+
+        # Genera los nombres de los pisos ["-2","-1","1","2"] (negativos para niveles bajo el nivel 0 y positivos para niveles sobre el nivel 0)
+        StoryNames = []
+        for i in range(1, len(self.stories)):
+            if i <= closest_idx:
+                StoryNames.append(str(-(closest_idx - i + 1)))
+            else:
+                StoryNames.append(str(i - closest_idx))
+                
         StoryElevations=[story.elevation for story in self.stories] # Elevación de cada piso
         StoryHeights=[self.get_story_height(story.id) for story in self.stories[1:]] # Altura de cada piso
         IsMasterStory=[False for elem in self.stories[1:]] # Ninguno es un piso maestro
@@ -120,5 +144,10 @@ class StoryManager:
         
         etabs_model.View.RefreshView(0,False)
         
+    def sumary(self):
+        return {
+            "n_stories": len(self.stories),
+            "stories": [story.get_data(self.get_story_height(story.id)) for story in self.stories]
+        }
 
     

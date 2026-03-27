@@ -10,7 +10,7 @@ from services.grid_factory import GridFactory
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq 2','Casa_BN_V2']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
@@ -18,6 +18,7 @@ SNAP_THRESHOLD=20 # Distancia angular máxima para que un elemento se considere 
 CANONICAL_ANGLES=[0,26,64,90,116,154] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
 MAX_DISTANCE=0.3 # Tolerancia de distancia para agrupar nodos similares.
 LMIN=0.2 # Longitud mínima para elementos estructurales.
+DZ=1 # Desplazamiento vertical del modelo. Permite agregar 1m en piso base.
 
 def run_pipeline(): 
     # 1. Creamos el modelo (Cerebro)
@@ -43,10 +44,9 @@ def run_pipeline():
 
     logger.info("Iniciando depuración geométrica...")
     optimizer.remove_short_elements(LMIN)
-    optimizer.remove_orphan_nodes()
-    optimizer.transform_model(dx="Auto",dy="Auto",alpha_deg=0)
-    #optimizer.pre_snap_nodes(MAX_DISTANCE)
+    optimizer.transform_model(dx="Auto",dy="Auto",dz=DZ,alpha_deg=0,filter_stories=[modelo.story_manager.get_base_story().name]) #aplico dz excepto para el piso base
     optimizer.remove_short_walls(min_height=0.2)
+    optimizer.remove_orphan_nodes()
     
     logger.info("Iniciando generación de grillas...")
     grid_factory.generate_grids(eps_deg=EPS_ANGLE,eps_dist=EPS_DIST,round_decimal=ROUND_DECIMAL,canonical_angles=CANONICAL_ANGLES,snap_threshold=SNAP_THRESHOLD)
@@ -56,17 +56,18 @@ def run_pipeline():
     optimizer.snap_z_to_levels(tolerance=0.2)
     optimizer.remove_short_walls(min_height=0.15)
     optimizer.remove_orphan_nodes()
-    #optimizer.pre_snap_nodes(0.5*MAX_DISTANCE) #hago un agrupamiento de nodos, ahora con una tolerancia menor
-
+        
     modelo.grid_manager.cleanup_unused_grids(tolerance=0.1)  #Elimino las grillas que no tienen elementos asigandos
     modelo.grid_manager.rename_grids()  #renombro las grillsa
+    modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
     #viz.plot_model(show_nodes=True,show_grids=True)
+    viz.plot_grid("AG")
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
     etabs_model.connect_active_etabs()
-    etabs_model.write_all()
+    #etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 

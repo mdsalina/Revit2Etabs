@@ -120,6 +120,7 @@ class RevitLoader:
         Carga los niveles del JSON, normaliza sus elevaciones a metros
         y los organiza a través del StoryManager.
         """
+        
         for lvl in levels_data:
             name = lvl.get('name', 'S/N')
             elevation_raw = lvl.get('elevation', 0.0)
@@ -132,6 +133,7 @@ class RevitLoader:
             elevation_m = self._apply_unit_pos(elevation_raw)
             # 2. Delegamos la creación y el ordenamiento al StoryManager del modelo
             self.model.story_manager.add_story(name=name,elevation=round(elevation_m,2),level_id=level_id)
+
         
         logger.info(f"Se han cargado {len(self.model.story_manager.stories)} niveles correctamente.")
             

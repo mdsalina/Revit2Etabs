@@ -67,6 +67,7 @@ class GridManager:
     def __init__(self, model):
         self.model = model
         self.systems = [] # Lista de objetos GridSystem
+        self.grid_elements_map = {}
 
     def add_system(self,name, prefix,dx=0,dy=0,angle=0):
         """Añade un sistema validando que no exista uno con el mismo nombre."""
@@ -249,3 +250,48 @@ class GridManager:
             print(f"❌ Error al establecer tabla de grid lines: {e}")
             return None, None
     
+    def map_elements_to_grids(self, tolerance=0.05):
+        """
+        Calcula a qué grillas pertenece cada elemento estructural.
+        Se ejecuta una sola vez después del Snap Nodes.
+        """
+        # 1. Inicializar el diccionario con todas las grillas existentes
+        self.grid_elements_map = {
+            grid.label: [] for system in self.systems for grid in system.grids
+        }
+        
+        # 2. Recopilar elementos a mapear (excluyendo losas, que son de planta)
+        elements_to_map = self.model.beams + self.model.walls + self.model.columns
+
+        for elem in elements_to_map:
+            # Identificamos el tipo de elemento para aplicar la lógica correcta
+            is_vertical = elem in self.model.columns
+            elem_angle = elem.get_angle() if not is_vertical else None
+            
+            # Usamos el start_node como punto de referencia para la posición
+            ref_node = elem.start_node
+
+            for system in self.systems:
+                for grid in system.grids:
+                    if self._is_on_grid(elem, ref_node, elem_angle, is_vertical, grid, tolerance):
+                        self.grid_elements_map[grid.label].append(elem)
+
+        logger.info("GridManager: Mapeo de elementos a ejes completado.")
+
+    def _is_on_grid(self, elem, ref_node, elem_angle, is_vertical, grid, tolerance):
+        """Evalúa si un elemento yace sobre una grilla específica."""
+        
+        # 1. Chequeo de paralelismo (Solo para Muros y Vigas)
+        if not is_vertical:
+            # Si el ángulo del elemento no coincide con el de la grilla, lo descartamos
+            diff = abs((elem_angle % 180) - (grid.angle_deg % 180))
+            if min(diff, 180 - diff) > 1.0:
+                return False
+
+        # 2. Chequeo de Posición Espacial (Para todos)
+        # Calculamos el rho del nodo de referencia respecto al ángulo de la grilla
+        theta_rad = np.radians((grid.angle_deg + 90) % 180)
+        node_rho = ref_node.x * np.cos(theta_rad) + ref_node.y * np.sin(theta_rad)
+        
+        # Si la distancia perpendicular (rho) es casi la misma, el elemento está en el eje
+        return abs(node_rho - grid.rho) < tolerance   

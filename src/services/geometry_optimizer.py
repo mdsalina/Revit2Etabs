@@ -25,13 +25,15 @@ class GeometryOptimizer:
         logger.info(f"Limpieza: Se eliminaron {initial_beams - len(self.model.beams)} vigas y "
                     f"{initial_walls - len(self.model.walls)} muros cortos.")
 
-    def transform_model(self, dx=0.0, dy=0.0, alpha_deg=0.0):
+    def transform_model(self, dx=0.0, dy=0.0, dz=0.0, alpha_deg=0.0,filter_stories=None):
         """
-        Desplaza y rota todos los nodos del modelo.
+        Desplaza y rota todos los nodos del modelo. Se puede aplicar un filtro (lista de pisos a excluir)
        
         """
         nodes = list(self.model.node_manager.nodes.values())
         if not nodes: return
+
+        filter_z=[s.elevation for s in self.model.story_manager.stories if s.name in filter_stories]
 
         # 1. Lógica "Auto": Buscar el nodo más abajo a la izquierda
         if dx == "Auto" or dy == "Auto":
@@ -44,6 +46,8 @@ class GeometryOptimizer:
         alpha_rad = np.radians(alpha_deg)
         c, s = np.cos(alpha_rad), np.sin(alpha_rad)
 
+        min_filter_z = min(filter_z) if filter_z else None
+
         for node in nodes:
             # Primero Desplazamiento
             new_x = node.x + dx
@@ -51,45 +55,27 @@ class GeometryOptimizer:
             # Luego Rotación respecto al nuevo origen (0,0)
             node.x = new_x * c - new_y * s
             node.y = new_x * s + new_y * c
+
+            if dz != 0.0:
+                is_filtered = False
+                if filter_z:
+                    is_filtered = any(abs(node.z - fz) < 1e-3 for fz in filter_z)
+                    # Evitar que nodos bajo el nivel filtrado más bajo (ej. piso base) se desplacen y se sobrepongan
+                    if min_filter_z is not None and node.z < min_filter_z - 1e-3:
+                        is_filtered = True
+                        
+                if not is_filtered:
+                    node.z = node.z + dz
+
+        if dz != 0.0:    
+            self.model.story_manager.apply_dz(dz, filter_stories)
             
         # 3. Si ya existen grillas, debemos transformarlas también
         self._transform_grid_systems(dx, dy, alpha_deg)
         
         # Es fundamental re-indexar después de mover todo masivamente
         self.model.node_manager.reindex()
-        logger.info(f"Transformación: Modelo movido ({dx}, {dy}) y rotado {alpha_deg}°.")
-
-    def pre_snap_nodes(self, tolerance=0.02):
-        """
-        Une nodos que están muy cerca antes de procesar grillas.
-        Actualiza las referencias de los nodos en todos los elementos estructurales.
-        """
-        # Reutilizamos la lógica de reindexación con una tolerancia mayor
-        mapping = self.model.node_manager.reindex(tolerance=tolerance)
-        
-        # Debemos actualizar las referencias dentro de los elementos
-        if mapping:
-            for element in self.model.beams + self.model.columns + self.model.walls + self.model.slabs:
-                if hasattr(element, 'nodes'):
-                    # Muros y losas
-                    for i in range(len(element.nodes)):
-                        if element.nodes[i].id in mapping:
-                            element.nodes[i] = mapping[element.nodes[i].id]
-                    # Update start_node and end_node for walls if they exist
-                    if hasattr(element, 'start_node') and element.start_node and element.start_node.id in mapping:
-                        element.start_node = mapping[element.start_node.id]
-                    if hasattr(element, 'end_node') and element.end_node and element.end_node.id in mapping:
-                        element.end_node = mapping[element.end_node.id]
-                else:
-                    # Vigas y columnas
-                    if element.start_node.id in mapping:
-                        element.start_node = mapping[element.start_node.id]
-                        element.n1 = element.start_node
-                    if element.end_node.id in mapping:
-                        element.end_node = mapping[element.end_node.id]
-                        element.n2 = element.end_node
-                        
-        logger.info(f"Pre-Snap: {len(mapping)} nodos fusionados y actualizados en elementos.")
+        logger.info(f"Transformación: Modelo movido ({dx}, {dy}, {dz}) y rotado {alpha_deg}°.")
 
     def _transform_grid_systems(self, dx, dy, alpha_deg):
         """Ajusta las grillas existentes a la nueva posición del modelo."""
