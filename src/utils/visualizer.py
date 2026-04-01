@@ -351,5 +351,179 @@ class StructuralVisualizer:
         
         self.fig.canvas.draw_idle()
         print(f"Nodo {node.id} Seleccionado - X: {node.x:.4f}, Y: {node.y:.4f}, Z: {node.z:.4f}")
-    
-    
+
+    def plot_plan(self, level_id, show_nodes=False, show_grids=True, show_slab=False):
+        """
+        Grafica en planta los elementos del modelo que tengan nodos calzando con el nivel indicado.
+        """
+        import math
+        import matplotlib.patches as patches
+        import matplotlib.lines as mlines
+        
+        # 1. Buscar el nivel (Story)
+        target_story = self.model.story_manager.get_story_by_id(level_id)
+        if not target_story:
+            # Intentar buscar por nombre
+            for s in self.model.story_manager.stories:
+                if s.name == str(level_id):
+                    target_story = s
+                    break
+                    
+        if not target_story:
+            print(f"Error: No se encontró el nivel con ID o nombre '{level_id}'.")
+            return
+            
+        z_target = target_story.elevation
+        
+        fig, ax = plt.subplots(figsize=(12, 12))
+        all_x, all_y = [], []
+        
+        def add_points(xs, ys):
+            all_x.extend(xs)
+            all_y.extend(ys)
+        
+        def get_thickness(elem, default=0.2):
+            if hasattr(elem, 'section') and elem.section in self.model.sections:
+                sec = self.model.sections[elem.section]
+                if hasattr(sec, 'thickness'):
+                    return sec.thickness
+            return default
+            
+        def get_dimensions(elem, default_w=0.4, default_h=0.4):
+            if hasattr(elem, 'section') and elem.section in self.model.sections:
+                sec = self.model.sections[elem.section]
+                if hasattr(sec, 'width') and hasattr(sec, 'height'):
+                    return sec.width, sec.height
+            return default_w, default_h
+            
+        def plot_thick_line(x1, y1, x2, y2, thickness, facecolor, alpha=0.5, zorder=2):
+            dx = x2 - x1
+            dy = y2 - y1
+            L = math.hypot(dx, dy)
+            if L < 1e-4:
+                return
+            ux, uy = dx/L, dy/L
+            nx, ny = -uy, ux
+            
+            ht = thickness / 2.0
+            px = [x1 + nx*ht, x2 + nx*ht, x2 - nx*ht, x1 - nx*ht]
+            py = [y1 + ny*ht, y2 + ny*ht, y2 - ny*ht, y1 - ny*ht]
+            ax.fill(px, py, facecolor=facecolor, edgecolor=facecolor, alpha=alpha, zorder=zorder)
+            add_points(px, py)
+
+        # Muros
+        for wall in self.model.walls:
+            if not wall.nodes: continue
+            min_z = min(n.z for n in wall.nodes)
+            max_z = max(n.z for n in wall.nodes)
+            
+            is_bottom = abs(min_z - z_target) < 0.01
+            is_top = abs(max_z - z_target) < 0.01
+            
+            if not (is_bottom or is_top):
+                continue
+                
+            color = 'blue' if is_bottom else 'red'
+            
+            x1, y1 = wall.start_node.x, wall.start_node.y
+            x2, y2 = wall.end_node.x, wall.end_node.y
+            
+            t = get_thickness(wall, 0.2)
+            plot_thick_line(x1, y1, x2, y2, t, color, alpha=0.5, zorder=2)
+            
+            if show_nodes:
+                ax.scatter([x1, x2], [y1, y2], color='black', s=15, zorder=5)
+                ax.text(x1, y1, str(wall.start_node.id), fontsize=7, color='darkred')
+                ax.text(x2, y2, str(wall.end_node.id), fontsize=7, color='darkred')
+                
+        # Vigas
+        for beam in self.model.beams:
+            if abs(beam.start_node.z - z_target) < 0.01 or abs(beam.end_node.z - z_target) < 0.01:
+                x1, y1 = beam.start_node.x, beam.start_node.y
+                x2, y2 = beam.end_node.x, beam.end_node.y
+                
+                w, _ = get_dimensions(beam, 0.2, 0.2)
+                plot_thick_line(x1, y1, x2, y2, w, 'green', alpha=0.5, zorder=3)
+                
+                if show_nodes:
+                    ax.scatter([x1, x2], [y1, y2], color='black', s=15, zorder=5)
+                    ax.text(x1, y1, str(beam.start_node.id), fontsize=7, color='darkred')
+                    ax.text(x2, y2, str(beam.end_node.id), fontsize=7, color='darkred')
+                    
+        # Columnas
+        for col in self.model.columns:
+            if abs(col.start_node.z - z_target) < 0.01 or abs(col.end_node.z - z_target) < 0.01:
+                x, y = col.start_node.x, col.start_node.y
+                dx = col.end_node.x - col.start_node.x
+                dy = col.end_node.y - col.start_node.y
+                
+                w, h = get_dimensions(col, 0.4, 0.4)
+                
+                if math.hypot(dx, dy) > 1e-4:
+                    # Inclined column
+                    plot_thick_line(x, y, col.end_node.x, col.end_node.y, w, 'black', alpha=1.0, zorder=4)
+                else:
+                    # Vertical column
+                    rect = patches.Rectangle((x - w/2, y - h/2), w, h, linewidth=1, edgecolor='black', facecolor='black', alpha=1.0, zorder=4)
+                    ax.add_patch(rect)
+                    add_points([x - w/2, x + w/2], [y - h/2, y + h/2])
+                    
+                if show_nodes:
+                    ax.scatter([x], [y], color='black', s=15, zorder=5)
+                    ax.text(x, y, str(col.start_node.id), fontsize=7, color='darkred')
+
+        # Losas
+        if show_slab:
+            for slab in self.model.slabs:
+                # Verificamos si la losa calza con el nivel actual
+                slab_z_min = min(n.z for n in slab.nodes) if slab.nodes else 0
+                slab_z_max = max(n.z for n in slab.nodes) if slab.nodes else 0
+                if abs(slab_z_min - z_target) < 0.01 or abs(slab_z_max - z_target) < 0.01:
+                    px = [n.x for n in slab.nodes]
+                    py = [n.y for n in slab.nodes]
+                    if px:
+                        px.append(px[0])
+                        py.append(py[0])
+                        ax.fill(px, py, color='cyan', alpha=0.2, edgecolor='darkcyan', zorder=1)
+                        add_points(px, py)
+
+        # Grillas
+        if show_grids:
+            nodes = list(self.model.node_manager.nodes.values())
+            if nodes:
+                bbox_nodes = (
+                    min(n.x for n in nodes), max(n.x for n in nodes),
+                    min(n.y for n in nodes), max(n.y for n in nodes)
+                )
+                for system in self.model.grid_manager.systems:
+                    for grid in system.grids:
+                        p1, p2 = grid.get_endpoints(bbox_nodes)
+                        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color='gray', linestyle='--', linewidth=0.8, alpha=0.5, zorder=0)
+                        ax.text(p1[0], p1[1], f" {grid.label}", color='gray', fontsize=7, fontweight='bold')
+                        ax.text(p2[0], p2[1], f"{grid.label} ", color='gray', fontsize=7, fontweight='bold', ha='right')
+        
+        # Formato de gráfica
+        ax.set_aspect('equal', adjustable='datalim')
+        if all_x and all_y:
+            margin_x = (max(all_x) - min(all_x)) * 0.05 if max(all_x) > min(all_x) else 2
+            margin_y = (max(all_y) - min(all_y)) * 0.05 if max(all_y) > min(all_y) else 2
+            ax.set_xlim(min(all_x) - margin_x, max(all_x) + margin_x)
+            ax.set_ylim(min(all_y) - margin_y, max(all_y) + margin_y)
+            
+        ax.set_title(f"Planta {target_story.name} (Z = {z_target:.2f}m)")
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Y (m)")
+        
+        # Leyenda manual
+        handles = [
+            patches.Patch(color='blue', alpha=0.5, label='Muro (N.Inf en nivel)'),
+            patches.Patch(color='red', alpha=0.5, label='Muro (N.Sup en nivel)'),
+            mlines.Line2D([], [], color='green', linewidth=3, alpha=0.5, label='Viga'),
+            patches.Patch(color='black', label='Columna')
+        ]
+        if show_slab:
+            handles.append(patches.Patch(color='cyan', alpha=0.2, label='Losa'))
+            
+        ax.legend(handles=handles, loc='upper right', bbox_to_anchor=(1.15, 1.0))
+        plt.tight_layout()
+        plt.show()

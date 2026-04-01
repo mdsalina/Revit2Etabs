@@ -33,7 +33,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[7]}.json")
+    loader.load_json(f"data/{test[8]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -62,13 +62,14 @@ def run_pipeline():
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
     optimizer.divide_walls_by_vertical_lines() # optimizo los muros fusionando y dividiendo por niveles
     
-    #viz.plot_model(show_nodes=True,show_grids=True)
+    viz.plot_model(show_nodes=True,show_grids=True)
+    viz.plot_plan(level_id="L2", show_nodes=False, show_grids=True, show_slab=False)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
-    #etabs_model.connect_active_etabs()
-    #etabs_model.write_all()
+    etabs_model.connect_active_etabs()
+    etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 
