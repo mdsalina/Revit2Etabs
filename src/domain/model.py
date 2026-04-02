@@ -9,6 +9,9 @@ from .sections import FrameSection, ShellSection
 from .Story import StoryManager
 from .grid_system import GridManager
 import numpy as np
+import logging
+
+logger = logging.getLogger("Revit2Etabs.Domain.Model")
 
 class Model:
     """ al cargar modelo siempre las unidades deben estar en metros"""
@@ -116,7 +119,7 @@ class Model:
                 self.slabs.append(elem)
             return new_elements
         else:
-            print("La losa no es completament horizontal, se descarta")
+            logger.error(f"La losa {revit_id} no es completament horizontal, se descarta")
 
         # 3. Clasificamos y guardamos los resultados
 

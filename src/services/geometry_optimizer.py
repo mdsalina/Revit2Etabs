@@ -1,5 +1,4 @@
 import numpy as np
-import numpy as np
 import logging
 
 logger = logging.getLogger("Revit2Etabs.Service.GeometryOptimizer")
@@ -364,3 +363,251 @@ class GeometryOptimizer:
         logger.info(f"GeometryOptimizer: División por perpendiculares aplicada. "
                     f"Muros removidos: {len(walls_to_remove)}, Muros nuevos: {len(new_walls_total)} | "
                     f"Vigas removidas: {len(beams_to_remove)}, Vigas nuevas: {len(new_beams_total)}.")
+
+    def convert_short_beams_to_walls(self, max_ratio=4.0, z_dir=1):
+        """
+        Convierte vigas cortas en muros proyectando sus nodos.
+        1. Itera sobre cada grid y sus elementos mapeados.
+        2. Identifica elementos 'frame' (vigas).
+        3. Evalúa esbeltez L/h <= max_ratio.
+        4. Transforma vigas cortas en WallElements.
+        """
+        from domain.elements.wall import WallElement
+        from domain.elements.frame import FrameElement
+        from domain.sections import ShellSection
+        
+        walls_to_add = []
+        beams_to_remove = set()
+        
+        for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+            # Identificamos vigas asumiendo que son FrameElement y están dentro de self.model.beams
+            beams_on_grid = [e for e in elements if isinstance(e, FrameElement) and e in self.model.beams]
+            
+            for beam in beams_on_grid:
+                if beam in beams_to_remove:
+                    continue
+                    
+                sec_obj = self.model.sections.get(beam.section)
+                # Validamos que sea Frame con altura (h)
+                if not sec_obj or getattr(sec_obj, 'type_name', '') != 'Frame':
+                    continue
+                    
+                h = sec_obj.height
+                L = beam.get_length()
+                
+                # Evaluar esbeltez L/h <= max_ratio
+                if h > 0 and (L / h) <= max_ratio:
+                    new_sec_name = f"WALL-BEAM-{int(sec_obj.width*100)}"
+                    if new_sec_name not in self.model.sections:
+                        self.model.sections[new_sec_name] = ShellSection(
+                            type_name='Wall',
+                            name=new_sec_name,
+                            material_name=sec_obj.material_name,
+                            thickness=sec_obj.width
+                        )
+                    
+                    n1 = beam.start_node
+                    n2 = beam.end_node
+                    # Proyectamos nodos en dirección Z
+                    n3 = self.model.node_manager.get_or_create_node(n2.x, n2.y, n2.z + z_dir * h)
+                    n4 = self.model.node_manager.get_or_create_node(n1.x, n1.y, n1.z + z_dir * h)
+                    
+                    new_wall = WallElement(
+                        revit_id=beam.revit_id,
+                        section=new_sec_name,
+                        level=beam.level,
+                        nodes=[n1, n2, n3, n4]
+                    )
+                    
+                    walls_to_add.append(new_wall)
+                    beams_to_remove.add(beam)
+
+        if beams_to_remove:
+            # Eliminamos las vigas convertidas y añadimos los nuevos muros
+            self.model.beams = [b for b in self.model.beams if b not in beams_to_remove]
+            self.model.walls.extend(walls_to_add)
+            
+            # Reindexar nodos tras generar nuevos nodos con get_or_create_node
+            self.model.node_manager.reindex()
+            # Actualizamos el mapeo global de grillas
+            self.model.grid_manager.map_elements_to_grids()
+            
+            logger.info(f"GeometryOptimizer: Se transformaron {len(beams_to_remove)} vigas cortas (L/h <= {max_ratio}) a elementos tipo Wall.")
+
+    def convert_large_walls_to_beams(self, alpha=0.5):
+        """
+        Analiza muros agrupándolos por adyacencia vertical y convierte 
+        grupos esbeltos (L/ht > 4) en vigas equivalentes.
+        - alpha: coeficiente de control para altura de corto-circuito.
+        """
+        from domain.elements.wall import WallElement
+        from domain.elements.frame import FrameElement
+        from domain.sections import FrameSection
+        
+        beams_to_add = []
+        walls_to_remove = set()
+        
+        level_elevs = sorted([s.elevation for s in self.model.story_manager.stories])
+
+        def get_wall_h_and_Hs(w):
+            z_coords = [n.z for n in w.nodes]
+            if not z_coords: return 0, 3.0
+            
+            min_z = min(z_coords)
+            max_z = max(z_coords)
+            h = max_z - min_z
+            
+            if len(level_elevs) >= 2:
+                upper_level = min(level_elevs, key=lambda e: abs(e - max_z))
+                lower_level = min(level_elevs, key=lambda e: abs(e - min_z))
+                
+                if upper_level != lower_level:
+                    Hs = abs(upper_level - lower_level)
+                else:
+                    idx = level_elevs.index(lower_level)
+                    if idx > 0:
+                        Hs = abs(level_elevs[idx] - level_elevs[idx-1])
+                    elif idx < len(level_elevs) - 1:
+                        Hs = abs(level_elevs[idx+1] - level_elevs[idx])
+                    else:
+                        Hs = 3.0
+            else:
+                Hs = 3.0
+                
+            return h, Hs
+        
+        for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+            walls = [e for e in elements if isinstance(e, WallElement) and e in self.model.walls]
+            if not walls: continue
+            
+            # 1. Agrupamiento por Adyacencia (Componentes Conexas)
+            adj = {w: [] for w in walls}
+            for i, w1 in enumerate(walls):
+                # Extraemos los ids de los nodos del muro
+                s1 = set(n.id for n in w1.nodes)
+                for j in range(i+1, len(walls)):
+                    w2 = walls[j]
+                    s2 = set(n.id for n in w2.nodes)
+                    inter = s1.intersection(s2)
+                    if len(inter) >= 2:
+                        nodes_inter = [n for n in w1.nodes if n.id in inter]
+                        z1 = nodes_inter[0].z
+                        z2 = nodes_inter[1].z
+                        # Arista horizontal (adyacencia vertical) -> comparten base/techo
+                        if abs(z1 - z2) < 0.1:
+                            adj[w1].append(w2)
+                            adj[w2].append(w1)
+            
+            visited = set()
+            components = []
+            for w in walls:
+                if w not in visited:
+                    comp = []
+                    q = [w]
+                    visited.add(w)
+                    while q:
+                        curr = q.pop(0)
+                        comp.append(curr)
+                        for neighbor in adj[curr]:
+                            if neighbor not in visited:
+                                visited.add(neighbor)
+                                q.append(neighbor)
+                    components.append(comp)
+                    
+            # Evaluar y Convertir componentes
+            for comp in components:
+                # Si algún elemento del grupo ya fue marcado para remover (en otra pasada), omitimos
+                if any(w in walls_to_remove for w in comp):
+                    continue
+                    
+                # 2. Cortocircuito: si alguno falla h < alpha * Hs
+                valid_height = True
+                for w in comp:
+                    h, Hs_local = get_wall_h_and_Hs(w)
+                    if h >= alpha * Hs_local:
+                        valid_height = False
+                        break
+                
+                if not valid_height:
+                    continue
+                
+                # 3. Altura efectiva (ht), Largo (L), y Espesor (Thickness)
+                all_z = [n.z for w in comp for n in w.nodes]
+                min_z = min(all_z)
+                max_z = max(all_z)
+                ht = max_z - min_z
+                
+                if ht == 0: continue
+                
+                L = comp[0].get_length() # Todos comparten longitud al estar apilados
+                
+                # Evaluamos razón de esbeltez global
+                if (L / ht) <= 4.0:
+                    continue
+                
+                # Obtener mínimo espesor del grupo
+                thicknesses = []
+                for w in comp:
+                    sec_obj = self.model.sections.get(w.section)
+                    if sec_obj and hasattr(sec_obj, 'thickness'):
+                        thicknesses.append(sec_obj.thickness)
+                min_thickness = min(thicknesses) if thicknesses else 0.20
+                
+                # 4. Cálculo de la Elevación Z del Frame
+                intersecting = [e for e in level_elevs if (min_z - 0.05) <= e <= (max_z + 0.05)]
+                
+                if intersecting:
+                    # Elegir el nivel más cercano a los bordes Z del muro "levelz que los intersecta"
+                    best_e = intersecting[0]
+                    best_dist = float('inf')
+                    for e in intersecting:
+                        dist = min(abs(e - min_z), abs(e - max_z))
+                        if dist < best_dist:
+                            best_dist = dist
+                            best_e = e
+                    chosen_z = best_e
+                else:
+                    # Muro a media altura
+                    chosen_z = min_z
+                    
+                # Nodos 2D del nuevo Frame (Usando extremo y extremo)
+                n1_2d = comp[0].start_node
+                n2_2d = comp[0].end_node
+                
+                n1_3d = self.model.node_manager.get_or_create_node(n1_2d.x, n1_2d.y, chosen_z)
+                n2_3d = self.model.node_manager.get_or_create_node(n2_2d.x, n2_2d.y, chosen_z)
+                
+                # 5. Generar sección Frame
+                # Usamos nombre especial para diferenciarlos
+                sec_name = f"SPANDREL-{int(min_thickness*100)}x{int(ht*100)}"
+                if sec_name not in self.model.sections:
+                    base_mat = self.model.sections[comp[0].section].material_name if comp[0].section in self.model.sections else "G30"
+                    self.model.sections[sec_name] = FrameSection(
+                        name=sec_name,
+                        material_name=base_mat,
+                        width=min_thickness,
+                        height=ht
+                    )
+                
+                # 6. Crear Viga y planificar la remoción de los muros
+                new_beam = FrameElement(
+                    revit_id=comp[0].revit_id,
+                    section=sec_name,
+                    level=comp[0].level,
+                    node_start=n1_3d,
+                    node_end=n2_3d
+                )
+                
+                beams_to_add.append(new_beam)
+                walls_to_remove.update(comp)
+
+        # Actualizar la colección de elementos 
+        if walls_to_remove:
+            self.model.walls = [w for w in self.model.walls if w not in walls_to_remove]
+            self.model.beams.extend(beams_to_add)
+            
+            self.model.node_manager.reindex()
+            self.model.grid_manager.map_elements_to_grids()
+            
+            logger.info(f"GeometryOptimizer: Se fusionaron e intercambiaron {len(walls_to_remove)} muros esbeltos "
+                        f"por {len(beams_to_add)} vigas equivalentes (Spandrels).")

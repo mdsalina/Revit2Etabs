@@ -10,7 +10,7 @@ class CustomConsoleFormatter(logging.Formatter):
         # Determine prefix/indent based on logger name
         if record.name == "Revit2Etabs.Main":
             return f"\n{original_msg}"
-        elif record.name.startswith("Revit2Etabs.Service"):
+        elif record.name.startswith("Revit2Etabs.Service") or record.name.startswith("Revit2Etabs.Domain"):
             return f"\t{original_msg}"
         
         return original_msg

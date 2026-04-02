@@ -65,6 +65,8 @@ def run_pipeline():
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
     optimizer.divide_by_perpendicular_elements() # optimizo los muros fusionando y dividiendo por niveles
+    optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
+    optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
 
     
     viz.plot_model(show_nodes=False,show_grids=True)
