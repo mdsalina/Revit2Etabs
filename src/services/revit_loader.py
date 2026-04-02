@@ -6,9 +6,11 @@ from services.load_filter import LoadFilter
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 
 STORY_FILTER=None #["L1","L2","L3","L4","L5","L6","L7"]
-SECTION_FILTER=None #['WALL-BL-MURO-H-A-150MM','WALL-BL-MURO-H-A-200MM','WALL-BL-MURO-H-A-250MM','WALL-BL-MURO-H-A-300MM','WALL-BL-MURO-H-A-350MM','WALL-BL-MURO-H-A-400MM']
-CATEGORIES_FILTER=None #['walls','frames']
-
+SECTION_FILTER=None#['WALL-MURO-20','WALL-MURO-15','FLOOR-FIA-LHA-20CM-COLOR','FLOOR-LOSA-15CM','WALL-MURO-20-COLOR','FLOOR-FIA-LHA-20CM','FLOOR-LOSA-15CM-GRIS'] #['WALL-BL-MURO-H-A-150MM','WALL-BL-MURO-H-A-200MM','WALL-BL-MURO-H-A-250MM','WALL-BL-MURO-H-A-300MM','WALL-BL-MURO-H-A-350MM','WALL-BL-MURO-H-A-400MM']
+CATEGORIES_FILTER=None#['walls','frames']
+THICKNESS_WALLS_FILTER=[0.15, 0.3] # ej. [0.2, 0.5]
+THICKNESS_SLABS_FILTER=[0.15, 0.2] # ej. [0.15, 0.3]
+THICKNESS_FRAMES_FILTER=[0.15, 0.3] # ej. [0.2, 0.6]
 
 class RevitLoader:
     UNIT_FACTORS = {
@@ -24,7 +26,14 @@ class RevitLoader:
         Recibe una instancia de la clase Model para poblarla.
         """
         self.model = model
-        self.filter = LoadFilter(STORY_FILTER, SECTION_FILTER, CATEGORIES_FILTER)
+        self.filter = LoadFilter(
+            levels=STORY_FILTER, 
+            sections=SECTION_FILTER, 
+            categories=CATEGORIES_FILTER,
+            thickness_walls=THICKNESS_WALLS_FILTER,
+            thickness_slabs=THICKNESS_SLABS_FILTER,
+            thickness_frames=THICKNESS_FRAMES_FILTER
+        )
         self.dz = 0.0 # Desplazamiento vertical acumulado
 
     def load_json(self, file_path):
@@ -163,8 +172,9 @@ class RevitLoader:
         for item in frames_data:
             level_name=item['level']
             section_name=item['section']
+            section_obj = self.model.sections.get(section_name)
 
-            if self.filter and not self.filter.is_valid(level=level_name, section=section_name,category="frames"):
+            if self.filter and not self.filter.is_valid(level=level_name, section=section_name, category="frames", section_obj=section_obj):
                 continue
 
             params = {
@@ -183,8 +193,9 @@ class RevitLoader:
         for w in walls_data:
             level_name=w['level']
             section_name=w['section']
+            section_obj = self.model.sections.get(section_name)
 
-            if self.filter and not self.filter.is_valid(level=level_name, section=section_name,category="walls"):
+            if self.filter and not self.filter.is_valid(level=level_name, section=section_name, category="walls", section_obj=section_obj):
                 continue
 
             self.model.add_wall(
@@ -200,14 +211,18 @@ class RevitLoader:
         for s in slabs_data:
             level_name=s['level']
             section_name=s['section']
+            section_obj = self.model.sections.get(section_name)
 
-            if self.filter and not self.filter.is_valid(level=level_name, section=section_name,category="slabs"):
+            if self.filter and not self.filter.is_valid(level=level_name, section=section_name, category="slabs", section_obj=section_obj):
                 continue
-
-            self.model.add_slab(
-                revit_id=s['revit_id'],
-                exterior_pts=self._apply_unit_pos(s['location']['outline']),
-                holes_pts=self._apply_unit_pos(self._extract_openings(s['location'])),
-                section=s['section'],
-                level=s['level'],
-            )
+            
+            try:
+                self.model.add_slab(
+                    revit_id=s['revit_id'],
+                    exterior_pts=self._apply_unit_pos(s['location']['outline']),
+                    holes_pts=self._apply_unit_pos(self._extract_openings(s['location'])),
+                    section=s['section'],
+                    level=s['level'],
+                )
+            except Exception as e:
+                logger.error(f"Error al cargar losa {s['revit_id']}: {str(e)}")

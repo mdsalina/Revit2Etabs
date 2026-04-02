@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger("Revit2Etabs.Domain.Story")
+
 class Story:
     def __init__(self, name, elevation, level_id):
         self.name = name

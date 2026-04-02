@@ -224,3 +224,143 @@ class GeometryOptimizer:
         
         logger.info(f"GeometryOptimizer: Se optimizaron los muros por eje geométrico. "
                     f"Muros originales procesados: {len(walls_to_remove)}, Muros resultantes generados: {len(new_walls_total)}.")
+
+    def divide_by_perpendicular_elements(self, tolerance=0.05):
+        """
+        Itera por todos los ejes y divide muros y vigas en los nodos de intersección
+        que pertenecen a elementos de otros ejes perpendiculares o distintos.
+        """
+        from services.wall_processor import WallProcessor
+        from domain.elements.wall import WallElement
+        from domain.elements.frame import FrameElement
+        
+        wp = WallProcessor(self.model)
+        
+        new_walls_total = []
+        walls_to_remove = set()
+        
+        new_beams_total = []
+        beams_to_remove = set()
+        
+        # 1. Obtener mapeo inverso de elemento -> ejes (ignorando losas explícitamente)
+        element_to_grids = {}
+        for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+            for e in elements:
+                if e in self.model.slabs:
+                    continue
+                if e not in element_to_grids:
+                    element_to_grids[e] = set()
+                element_to_grids[e].add(grid_label)
+                
+        def get_external_nodes_for_grid(current_grid_label):
+            external_nodes = set()
+            for elem, grids in element_to_grids.items():
+                if current_grid_label not in grids or len(grids) > 1:
+                    nodes = elem.nodes if hasattr(elem, 'nodes') else [elem.start_node, elem.end_node]
+                    for n in nodes:
+                        if n is not None:
+                            external_nodes.add(n)
+            return list(external_nodes)
+        
+        # Iterar sobre una copia para poder modificar tranquilamente
+        for grid_label, elements in list(self.model.grid_manager.grid_elements_map.items()):
+            walls = [e for e in elements if isinstance(e, WallElement)]
+            beams = [e for e in elements if isinstance(e, FrameElement) and e not in self.model.columns]
+            
+            if not walls and not beams:
+                continue
+                
+            grid_obj = None
+            for system in self.model.grid_manager.systems:
+                for g in system.grids:
+                    if g.label == grid_label:
+                        grid_obj = g
+                        break
+                if grid_obj:
+                    break
+                    
+            if not grid_obj:
+                continue
+                
+            external_nodes = get_external_nodes_for_grid(grid_label)
+            
+            theta_rad = np.radians((grid_obj.angle_deg + 90) % 180)
+            valid_external_nodes = []
+            
+            for node in external_nodes:
+                node_rho = node.x * np.cos(theta_rad) + node.y * np.sin(theta_rad)
+                if abs(node_rho - grid_obj.rho) < tolerance:
+                    valid_external_nodes.append(node)
+                    
+            if not valid_external_nodes:
+                continue
+                
+            if walls:
+                new_walls = wp.process_elements_group(walls, nodes_on_grid=valid_external_nodes)
+                if new_walls:
+                    new_walls_total.extend(new_walls)
+                    for w in walls:
+                        walls_to_remove.add(w)
+                    
+            for beam in beams:
+                # Comprobación de longitud en 3D
+                dx = beam.end_node.x - beam.start_node.x
+                dy = beam.end_node.y - beam.start_node.y
+                dz = beam.end_node.z - beam.start_node.z
+                length = (dx**2 + dy**2 + dz**2)**0.5
+                if length == 0: continue
+                
+                cut_nodes = []
+                for n in valid_external_nodes:
+                    if n.id == beam.start_node.id or n.id == beam.end_node.id:
+                        continue
+                        
+                    dist1 = ((n.x - beam.start_node.x)**2 + (n.y - beam.start_node.y)**2 + (n.z - beam.start_node.z)**2)**0.5
+                    dist2 = ((n.x - beam.end_node.x)**2 + (n.y - beam.end_node.y)**2 + (n.z - beam.end_node.z)**2)**0.5
+                    
+                    if abs(dist1 + dist2 - length) < tolerance:
+                        cut_nodes.append((dist1, n))
+                        
+                if cut_nodes:
+                    cut_nodes.sort(key=lambda x: x[0])  # Ordenar por distancia desde start_node
+                    
+                    current_start = beam.start_node
+                    for dist, node in cut_nodes:
+                        new_beam = FrameElement(
+                            revit_id=beam.revit_id,
+                            section=beam.section,
+                            level=beam.level,
+                            node_start=current_start,
+                            node_end=node
+                        )
+                        new_beams_total.append(new_beam)
+                        current_start = node
+                        
+                    last_beam = FrameElement(
+                        revit_id=beam.revit_id,
+                        section=beam.section,
+                        level=beam.level,
+                        node_start=current_start,
+                        node_end=beam.end_node
+                    )
+                    new_beams_total.append(last_beam)
+                    beams_to_remove.add(beam)
+                    
+        # Aplicamos cambios al modelo en Muros
+        if walls_to_remove:
+            self.model.walls = [w for w in self.model.walls if w not in walls_to_remove]
+            self.model.walls.extend(new_walls_total)
+            
+        # Aplicamos cambios al modelo en Vigas
+        if beams_to_remove:
+            self.model.beams = [b for b in self.model.beams if b not in beams_to_remove]
+            self.model.beams.extend(new_beams_total)
+            
+        if walls_to_remove or beams_to_remove:
+            self.model.node_manager.reindex()
+            # Remapear elementos a las grillas para que todo quede en un estado consistente
+            self.model.grid_manager.map_elements_to_grids(tolerance=tolerance)
+            
+        logger.info(f"GeometryOptimizer: División por perpendiculares aplicada. "
+                    f"Muros removidos: {len(walls_to_remove)}, Muros nuevos: {len(new_walls_total)} | "
+                    f"Vigas removidas: {len(beams_to_remove)}, Vigas nuevas: {len(new_beams_total)}.")

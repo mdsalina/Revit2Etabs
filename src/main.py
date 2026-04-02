@@ -10,15 +10,17 @@ from services.grid_factory import GridFactory
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
 SNAP_THRESHOLD=20 # Distancia angular máxima para que un elemento se considere parte de un ángulo canónico
-CANONICAL_ANGLES=[0,26,64,90,116,154] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
+CANONICAL_ANGLES=[0,90]#[0,26,64,90,116,154] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
 MAX_DISTANCE=0.3 # Tolerancia de distancia para agrupar nodos similares.
 LMIN=0.2 # Longitud mínima para elementos estructurales.
 DZ=1 # Desplazamiento vertical del modelo. Permite agregar 1m en piso base.
+DZ_LEVEL=0.35 # Tolerancia de distancia para ajustar la altura de los nodos a los niveles.
+BEAM_GRID=False # Si es True, se genera una grilla para vigas.
 
 def run_pipeline(): 
     # 1. Creamos el modelo (Cerebro)
@@ -33,7 +35,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[8]}.json")
+    loader.load_json(f"data/{test[10]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -45,7 +47,7 @@ def run_pipeline():
     logger.info("Iniciando depuración geométrica...")
     optimizer.remove_short_elements(LMIN)
     optimizer.transform_model(dx="Auto",dy="Auto",dz=DZ,alpha_deg=0,filter_stories=[modelo.story_manager.get_base_story().name]) #aplico dz excepto para el piso base
-    optimizer.remove_short_walls(min_height=0.2)
+    optimizer.remove_short_walls(min_height=LMIN)
     optimizer.remove_orphan_nodes()
     
     logger.info("Iniciando generación de grillas...")
@@ -53,17 +55,21 @@ def run_pipeline():
     grid_factory.snap_nodes(max_distance=MAX_DISTANCE)
     optimizer.remove_short_elements(LMIN) #hago una nueva depuración geométrica luego del desplazamiento y ajuste a la grilla
     optimizer.remove_elements_below_base(tolerance=0.01)
-    optimizer.snap_z_to_levels(tolerance=0.2)
-    optimizer.remove_short_walls(min_height=0.15)
+    optimizer.snap_z_to_levels(tolerance=DZ_LEVEL)
+    optimizer.remove_short_walls(min_height=LMIN)
     optimizer.remove_orphan_nodes()
-        
-    modelo.grid_manager.cleanup_unused_grids(tolerance=0.1)  #Elimino las grillas que no tienen elementos asigandos
+    
+
+    modelo.grid_manager.cleanup_unused_grids(tolerance=0.1,beam_grid=BEAM_GRID)  #Elimino las grillas que no tienen elementos asigandos
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
-    optimizer.divide_walls_by_vertical_lines() # optimizo los muros fusionando y dividiendo por niveles
+
+    optimizer.divide_by_perpendicular_elements() # optimizo los muros fusionando y dividiendo por niveles
+
     
-    viz.plot_model(show_nodes=True,show_grids=True)
-    viz.plot_plan(level_id="L2", show_nodes=False, show_grids=True, show_slab=False)
+    viz.plot_model(show_nodes=False,show_grids=True)
+    #viz.plot_grid("A8", show_nodes=True, show_grids=True, show_levels=True)
+    #viz.plot_plan(level_id="L2", show_nodes=False, show_grids=True, show_slab=False)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")

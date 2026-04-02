@@ -91,12 +91,16 @@ class GridManager:
             "grillas": len(self.get_all_grids())
         }
     
-    def cleanup_unused_grids(self, tolerance=0.01):
+    def cleanup_unused_grids(self, tolerance=0.01, beam_grid=True):
         """
         Elimina las grillas que no tienen elementos (muros, vigas, columnas) 
-        posicionados sobre ellas.
+        posicionados sobre ellas. Si beam_grid es False, elimina también
+        las grillas que poseen únicamente vigas.
         """
-        elements = self.model.beams + self.model.walls + self.model.columns
+        if beam_grid:
+            elements = self.model.beams + self.model.walls + self.model.columns
+        else:
+            elements = self.model.walls + self.model.columns
         
         for system in self.systems:
             active_grids = []
