@@ -35,7 +35,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[8]}.json")
+    loader.load_json(f"data/{test[2]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()

@@ -196,7 +196,13 @@ class GridManager:
             print(f"❌ Error al establecer tabla de grid systems: {e}")
             return None, None   
 
-    def gridLines_to_etabs(self,etabs_model):
+    def gridLines_to_etabs(self,etabs_model,prefix=1):
+        """
+        prefix: prefijo para las grillas
+        prefix=0: No se usa prefijo
+        prefix=1: prefijo desde el sistema 2 en adelante
+        prefix=2: prefijo para todos los sistemas
+        """
         grid_data=[]
 
         for system in self.systems:
@@ -214,7 +220,17 @@ class GridManager:
                 else:
                     orientacion = "X (Cartesian)"         
 
-                grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])
+                if prefix == 0:
+                    grid.label = grid.label[1:]
+                    grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])
+                elif prefix == 1:
+                    if system.name == "G1":
+                        grid.label = grid.label[1:]
+                        grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])
+                    else:
+                        grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])
+                elif prefix == 2:
+                    grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])
 
         table_key = "Grid Definitions - Grid Lines"
 

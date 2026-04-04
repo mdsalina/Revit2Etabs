@@ -70,14 +70,6 @@ class EtabsWriter:
         self.model.grid_manager.gridSystems_to_etabs(self.SapModel)
         self.model.grid_manager.gridLines_to_etabs(self.SapModel)
 
-    def _write_sections(self):
-        logger.info("Definiendo secciones...")
-        for sec_name, sec_data in self.model.sections.items():
-            # Aquí usarías comandos como:
-            # self.SapModel.PropFrame.SetRectangle(sec_name, "CONC", h, w)
-            # Por ahora simulamos la llamada
-            print(f"API: Definiendo sección {sec_name}")
-
     def _write_nodes(self):
         logger.info("Dibujando nodos...")
         for node in self.model.node_manager.nodes.values():

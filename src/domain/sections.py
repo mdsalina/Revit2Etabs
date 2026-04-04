@@ -16,11 +16,21 @@ class FrameSection(Section):
         """Llamada real a la API de ETABS para dibujar un Frame."""
         # Retorna (NombreElemento, Resultado)
         section_name=f"V-{int(self.width*100)}/{int(self.height*100)}"
-        ret=sap_model.PropFrame.SetRectangle(section_name, "H30", self.height, self.width)
-        ret=sap_model.PropFrame.SetModifiers(section_name, [1, 1, 1, 0, 1, 1, 1, 1])
-        ret=sap_model.PropFrame.SetRebarBeam(section_name, "A630H","A630H",0.04,0.04,0,0,0,0)
+        sections_etabs=sap_model.DatabaseTables.GetTableForDisplayArray("Frame Section Property Definitions - Concrete Rectangular",GroupName="")
+        cols,n_rows,rows=sections_etabs[2],sections_etabs[3],sections_etabs[4]
+        sections_etabs_list=[]
+        col_name=cols.index("Name")
+        for i in range(n_rows):
+            sections_etabs_list.append(rows[i*len(cols)+col_name])
 
-        return ret
+        if section_name in sections_etabs_list:
+            return section_name
+        else:
+            ret=sap_model.PropFrame.SetRectangle(section_name, "H30", self.height, self.width)
+            ret=sap_model.PropFrame.SetModifiers(section_name, [1, 1, 1, 0, 1, 1, 1, 1])
+            ret=sap_model.PropFrame.SetRebarBeam(section_name, "A630H","A630H",0.04,0.04,0,0,0,0)
+
+            return ret
 
 class ShellSection(Section):
     def __init__(self, type_name, name, material_name, thickness):
@@ -32,9 +42,30 @@ class ShellSection(Section):
         # Retorna (NombreElemento, Resultado)
         if self.type_name == 'Wall':
             section_name=f"M-{int(self.thickness*100)}"
-            ret=sap_model.PropArea.SetWall(section_name, 1, 1,"H30", self.thickness) #1=Specified, 1=ShellThin
+            sections_etabs=sap_model.DatabaseTables.GetTableForDisplayArray("Wall Property Definitions - Specified",GroupName="")
+            cols,n_rows,rows=sections_etabs[2],sections_etabs[3],sections_etabs[4]
+            sections_etabs_list=[]
+            col_name=cols.index("Name")
+            for i in range(n_rows):
+                sections_etabs_list.append(rows[i*len(cols)+col_name])
+            
+            if section_name in sections_etabs_list:
+                return section_name
+            else:
+                ret=sap_model.PropArea.SetWall(section_name, 1, 1,"H30", self.thickness) #1=Specified, 1=ShellThin
 
         elif self.type_name == 'Slab':
             section_name=f"L-{int(self.thickness*100)}"
-            ret=sap_model.PropArea.SetSlab(section_name, 0, 1,"H30", self.thickness) #1=Specified, 1=ShellThin
+            sections_etabs=sap_model.DatabaseTables.GetTableForDisplayArray("Slab Property Definitions",GroupName="")
+            cols,n_rows,rows=sections_etabs[2],sections_etabs[3],sections_etabs[4]
+            sections_etabs_list=[]
+            col_name=cols.index("Name")
+            for i in range(n_rows):
+                sections_etabs_list.append(rows[i*len(cols)+col_name])
+
+            if section_name in sections_etabs_list:
+                return section_name
+            else:
+                ret=sap_model.PropArea.SetSlab(section_name, 0, 1,"H30", self.thickness) #1=Specified, 1=ShellThin
+
         return ret
