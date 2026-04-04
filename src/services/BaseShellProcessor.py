@@ -9,18 +9,57 @@ class BaseShellProcessor(ABC):
         self._current_transform = None
         self.should_split_by_levels = False # Por defecto desactivado
 
-    def process_element(self, original_element):
+    def process_element(self, original_element, split_direction='vertical', extra_zs=None):
         """Pipeline común para cualquier Shell (Muro o Losa)."""
         # 1. Proyección a 2D Local
         poly_2d = self._project_to_2d(original_element)
         
         # 2. Pipeline de Shapely (el que ya definiste)
-        rects_2d = self._run_shapely_pipeline(poly_2d)
+        rects_2d = self._run_shapely_pipeline(poly_2d, split_direction=split_direction)
         
         if self.should_split_by_levels:
             rects_2d = self._apply_level_splitting(rects_2d)
 
+        if extra_zs:
+            rects_2d = self._apply_z_splitting(rects_2d, extra_zs)
+
         # 3. Creación de elementos específicos (Delegado a las hijas)
+        new_elements = []
+        for rect in rects_2d:
+            element = self._create_structural_element(rect, original_element)
+            new_elements.append(element)
+            
+        return new_elements
+
+    def divide_by_z(self, original_element, extra_zs):
+        """
+        Corta un elemento puramente en las cotas Z especificadas sin aplicar el resto del pipeline 
+        (sin simplificar rectángulos ni fusionar), preservando su topología base al 100%.
+        """
+        if not extra_zs:
+            return [original_element]
+            
+        poly_2d = self._project_to_2d(original_element)
+        origin_z = self._current_transform[0][2]
+        
+        # Redondear y ordenar para evitar cortes microscópicos causados por ruido numérico
+        local_vs = sorted(list({round(z - origin_z, 3) for z in extra_zs}))
+        
+        rects_2d = [poly_2d]
+        for v_cut in local_vs:
+            new_rects = []
+            for poly in rects_2d:
+                min_u, min_v, max_u, max_v = poly.bounds
+                if min_v + 1e-3 < v_cut < max_v - 1e-3:
+                    cutter = LineString([(min_u - 1, v_cut), (max_u + 1, v_cut)])
+                    result = split(poly, cutter)
+                    for geom in getattr(result, 'geoms', []):
+                        if isinstance(geom, Polygon) and geom.area > 1e-6:
+                            new_rects.append(geom)
+                else:
+                    new_rects.append(poly)
+            rects_2d = new_rects
+            
         new_elements = []
         for rect in rects_2d:
             element = self._create_structural_element(rect, original_element)
@@ -33,10 +72,15 @@ class BaseShellProcessor(ABC):
         """Cada hijo decide qué objeto de dominio crear."""
         pass
 
-    def _run_shapely_pipeline(self, poly):
-        rects = self.split_rectangles(poly)
-        simplified = self.simplificar_rectangulos(rects)
-        return self.merge_horizontal(simplified)
+    def _run_shapely_pipeline(self, poly, split_direction='vertical'):
+        if split_direction == 'horizontal':
+            rects = self.split_rectangles_horizontal(poly)
+            simplified = self.simplificar_rectangulos(rects)
+            return self.merge_vertical(simplified)
+        else:
+            rects = self.split_rectangles(poly)
+            simplified = self.simplificar_rectangulos(rects)
+            return self.merge_horizontal(simplified)
     
     def _get_local_axes(self, exterior_coords):
         """
@@ -126,7 +170,7 @@ class BaseShellProcessor(ABC):
         
         return self._project_element_with_transform(wall_element, self._current_transform)
 
-    def process_elements_group(self, original_elements, nodes_on_grid=None):
+    def process_elements_group(self, original_elements, nodes_on_grid=None, split_direction='vertical'):
         """
         Procesa un grupo de elementos (Ej. todos los muros de un eje), unificando sus geometrías
         en un plano 2D común antes de aplicar la división y generación de nuevos elementos.
@@ -160,7 +204,7 @@ class BaseShellProcessor(ABC):
         merged_poly = merged_poly.buffer(-1e-4, cap_style=3, join_style=2)
         
         # 3. Pipeline de Shapely
-        rects_2d = self._run_shapely_pipeline(merged_poly)
+        rects_2d = self._run_shapely_pipeline(merged_poly, split_direction=split_direction)
         
         if self.should_split_by_levels:
             rects_2d = self._apply_level_splitting(rects_2d)
@@ -293,6 +337,81 @@ class BaseShellProcessor(ABC):
 
         return fusionados
 
+    def split_rectangles_horizontal(self, geom, *, usar_split=False, tol=1e-8):
+        """
+        Divide un Polygon/MultiPolygon/GeometryCollection en rectángulos
+        horizontales sin agujeros. Devuelve una lista de Polygon.
+        """
+        if geom.is_empty:
+            return []
+        if isinstance(geom, Polygon):
+            return self._split_polygon_horizontal(geom, usar_split, tol)
+        if isinstance(geom, (MultiPolygon, GeometryCollection)):
+            out = []
+            for g in geom.geoms:
+                out.extend(self.split_rectangles_horizontal(g, usar_split=usar_split, tol=tol))
+            return out
+        return []
+
+    def _split_polygon_horizontal(self, poly: Polygon, usar_split: bool, tol: float):
+        """
+        Parte cualquier polígono orto-alineado en
+        rectángulos horizontales sin perforaciones.
+        """
+        ys = {y for _, y in poly.exterior.coords}
+        for ring in poly.interiors:
+            ys.update(y for _, y in ring.coords)
+        ys = sorted(ys)
+
+        minx, miny, maxx, maxy = poly.bounds
+        partes = [poly] if usar_split else []
+        if usar_split:
+            for y in ys[1:-1]:
+                cutter = LineString([(minx - tol, y), (maxx + tol, y)])
+                nuevas = []
+                for p in partes:
+                    nuevas.extend(split(p, cutter))
+                partes = nuevas
+        else:
+            for y0, y1 in zip(ys[:-1], ys[1:]):
+                tira = box(minx, y0, maxx, y1)
+                corte = poly.intersection(tira)
+                if not corte.is_empty:
+                    partes.append(corte)
+
+        rects = []
+        for g in partes:
+            if g.geom_type == "Polygon":
+                rects.append(g)
+            else:
+                rects.extend(p for p in g.geoms if p.geom_type == "Polygon")
+        return [r for r in rects if not r.interiors]
+
+    def merge_vertical(self, rects, tol=1e-9):
+        """
+        Agrupa rectángulos contiguos que tengan exactamente el mismo (minx, maxx).
+        Devuelve una lista nueva, sin modificar la original.
+        """
+        from collections import defaultdict
+        grupos = defaultdict(list)
+        for r in rects:
+            minx, miny, maxx, maxy = r.bounds
+            grupos[(round(minx, 9), round(maxx, 9))].append((miny, maxy, r))
+
+        fusionados = []
+        for (minx, maxx), lst in grupos.items():
+            lst.sort(key=lambda t: t[0])
+            cur_miny, cur_maxy, _ = lst[0]
+            for miny, maxy, _ in lst[1:]:
+                if abs(miny - cur_maxy) <= tol:
+                    cur_maxy = maxy
+                else:
+                    fusionados.append(box(minx, cur_miny, maxx, cur_maxy))
+                    cur_miny, cur_maxy = miny, maxy
+            fusionados.append(box(minx, cur_miny, maxx, cur_maxy))
+
+        return fusionados
+
     def _apply_level_splitting(self, rects):
         """Rebana los rectángulos 2D usando las elevaciones de los niveles."""
         if not self.model.story_manager.stories: return rects
@@ -309,6 +428,32 @@ class BaseShellProcessor(ABC):
             
             for v_cut in level_v_coords:
                 # Solo cortamos si el nivel está dentro del rango del polígono
+                if min_v + 1e-4 < v_cut < max_v - 1e-4:
+                    new_temp = []
+                    cutter = LineString([(min_u - 1, v_cut), (max_u + 1, v_cut)])
+                    for p in temp_list:
+                        result = split(p, cutter)
+                        new_temp.extend([geom for geom in result.geoms if isinstance(geom, Polygon)])
+                    temp_list = new_temp
+            
+            split_rects.extend(temp_list)
+        
+        return split_rects
+
+    def _apply_z_splitting(self, rects, extra_zs):
+        """Rebana los rectángulos 2D usando un conjunto de coordenadas Z globales."""
+        if not extra_zs: return rects
+        
+        origin_z = self._current_transform[0][2]
+        local_vs = [z - origin_z for z in extra_zs]
+        
+        split_rects = []
+        for poly in rects:
+            min_u, min_v, max_u, max_v = poly.bounds
+            temp_list = [poly]
+            
+            for v_cut in local_vs:
+                # Solo cortamos si la cota Z cae dentro del polígono
                 if min_v + 1e-4 < v_cut < max_v - 1e-4:
                     new_temp = []
                     cutter = LineString([(min_u - 1, v_cut), (max_u + 1, v_cut)])

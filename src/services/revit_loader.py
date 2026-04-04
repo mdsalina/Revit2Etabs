@@ -139,9 +139,9 @@ class RevitLoader:
                 continue  
 
             # 1. Normalizamos la elevación a la unidad base (metros)
-            elevation_m = self._apply_unit_pos(elevation_raw)
+            elevation_m = round(self._apply_unit_pos(elevation_raw),2)
             # 2. Delegamos la creación y el ordenamiento al StoryManager del modelo
-            self.model.story_manager.add_story(name=name,elevation=round(elevation_m,2),level_id=level_id)
+            self.model.story_manager.add_story(name=name,elevation=elevation_m,level_id=level_id)
 
         
         logger.info(f"Se han cargado {len(self.model.story_manager.stories)} niveles correctamente.")

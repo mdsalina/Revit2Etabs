@@ -35,7 +35,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[10]}.json")
+    loader.load_json(f"data/{test[8]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -64,13 +64,14 @@ def run_pipeline():
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
-    optimizer.divide_by_perpendicular_elements() # optimizo los muros fusionando y dividiendo por niveles
+    optimizer.divide_walls_by_vertical_lines_and_perpendicular_elements() # optimizo los muros fusionando y dividiendo por niveles
     optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
     optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
+    optimizer.divide_walls_by_horizontal_lines()
 
     
-    viz.plot_model(show_nodes=False,show_grids=True)
-    #viz.plot_grid("A8", show_nodes=True, show_grids=True, show_levels=True)
+    #viz.plot_model(show_nodes=False,show_grids=True)
+    #viz.plot_grid("A6", show_nodes=False, show_grids=True, show_levels=True)
     #viz.plot_plan(level_id="L2", show_nodes=False, show_grids=True, show_slab=False)
      
     # 3. Escribimos en ETABS (Manos)

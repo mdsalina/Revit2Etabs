@@ -224,7 +224,108 @@ class GeometryOptimizer:
         logger.info(f"GeometryOptimizer: Se optimizaron los muros por eje geométrico. "
                     f"Muros originales procesados: {len(walls_to_remove)}, Muros resultantes generados: {len(new_walls_total)}.")
 
-    def divide_by_perpendicular_elements(self, tolerance=0.05):
+    def divide_walls_by_horizontal_lines(self):
+        """
+        Recorre todos los ejes del proyecto y toma los muros asociados a cada uno.
+        Para cada muro, usa su misma geometría base y la corta puramente en las elevaciones Z
+        saltándose cualquier pipeline estructural (como envelope), respetando al 100%
+        su forma actual y divisiones verticales previas.
+        Corta únicamente usando las coordenadas Z de los elementos (muros, vigas)
+        que estén directamente arriba, abajo o sobre el mismo muro (horizontalmente hablando).
+        """
+        from services.wall_processor import WallProcessor
+        from domain.elements.wall import WallElement
+        import numpy as np
+        
+        wp = WallProcessor(self.model)
+        
+        new_walls_total = []
+        walls_to_remove = set()
+        
+        for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+            walls = [e for e in elements if isinstance(e, WallElement)]
+            if not walls:
+                continue
+                
+            # Proyectar el primer muro del eje para tener un sistema coordenado base
+            wp._project_to_2d(walls[0])
+            origin, u_axis, v_axis = wp._current_transform
+            
+            # 1. Crear polígonos individuales y generar la "máscara" por unary_union
+            from shapely.geometry import Point, MultiPolygon, GeometryCollection, Polygon
+            from shapely.ops import unary_union
+            
+            wall_polys = []
+            for w in walls:
+                poly = wp._project_element_with_transform(w, wp._current_transform)
+                wall_polys.append((w, poly))
+                
+            merged_geom = unary_union([poly.buffer(1e-4, cap_style=3, join_style=2) for _, poly in wall_polys])
+            merged_geom = merged_geom.buffer(-1e-4, cap_style=3, join_style=2)
+            
+            masks = []
+            if isinstance(merged_geom, Polygon):
+                masks.append(merged_geom)
+            elif hasattr(merged_geom, 'geoms'):
+                masks.extend([g for g in merged_geom.geoms if isinstance(g, Polygon)])
+                
+            # 2. Recolectar nodos de todos los elementos en el eje (vigas, losas, muros)
+            grid_nodes = set()
+            for e in elements:
+                if hasattr(e, 'nodes'):
+                    for n in e.nodes:
+                        if n is not None:
+                            grid_nodes.add(n)
+                            
+            node_pts = []
+            for n in grid_nodes:
+                rel_p = np.array([n.x, n.y, n.z]) - origin
+                u = np.dot(rel_p, u_axis)
+                v = np.dot(rel_p, v_axis)
+                node_pts.append((n, Point(u, v)))
+                
+            # 3. Intersectar y propagar
+            visited_walls = set()
+            for mask in masks:
+                # Encontrar qué muros están físicamente dentro de este bloque monolítico
+                mask_walls = []
+                for w, poly in wall_polys:
+                    if w in visited_walls: continue
+                    # Usamos una tolerancia prudente para la verificación de pertenencia a la máscara
+                    if mask.buffer(1e-3).intersects(poly):
+                        mask_walls.append(w)
+                        visited_walls.add(w)
+                        
+                if not mask_walls:
+                    continue
+                    
+                # Encontrar qué nodos (alturas Z) de la red tocan este bloque monolítico
+                mask_zs = set()
+                mask_expanded = mask.buffer(0.05) # 5cm de tolerancia para atrapar nodos conectados a la cara
+                for n, pt in node_pts:
+                    if mask_expanded.intersects(pt):
+                        mask_zs.add(n.z)
+                        
+                # Aplicar las Z a todo el bloque originario
+                if mask_zs:
+                    for w in mask_walls:
+                        new_walls = wp.divide_by_z(w, list(mask_zs))
+                        if len(new_walls) > 1:
+                            new_walls_total.extend(new_walls)
+                            walls_to_remove.add(w)
+                    
+        # Actualizar el modelo
+        self.model.walls = [w for w in self.model.walls if w not in walls_to_remove]
+        self.model.walls.extend(new_walls_total)
+        
+        # Re-indexar y remapear
+        self.model.node_manager.reindex()
+        self.model.grid_manager.map_elements_to_grids()
+        
+        logger.info(f"GeometryOptimizer: División horizontal de muros aplicada. "
+                    f"Muros cortados: {len(walls_to_remove)}, Muros resultantes: {len(new_walls_total)}.")
+
+    def divide_walls_by_vertical_lines_and_perpendicular_elements(self, tolerance=0.05):
         """
         Itera por todos los ejes y divide muros y vigas en los nodos de intersección
         que pertenecen a elementos de otros ejes perpendiculares o distintos.

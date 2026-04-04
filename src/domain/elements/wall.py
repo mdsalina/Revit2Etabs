@@ -38,11 +38,40 @@ class WallElement(StructuralElement):
         Genera el comando AddByCoord para ETABS.
         """
         n_nodes = len(self.nodes)
-        
-        # Extraemos las coordenadas como tuplas para la API
-        x_coords = [round(n.x, 4) for n in self.nodes]
-        y_coords = [round(n.y, 4) for n in self.nodes]
-        z_coords = [round(n.z, 4) for n in self.nodes]
+        if n_nodes < 3:
+            print(f"Error: Muro con {n_nodes} nodos, se descarta")
+            return None
+            
+        # --- ORDENAMIENTO DE NODOS ---
+        # Ordenar nodos de forma perimetral (horaria/anti-horaria) para evitar cruzamientos 
+        # y vértices opuestos consecutivos en el polígono.
+        cx = sum(n.x for n in self.nodes) / n_nodes
+        cy = sum(n.y for n in self.nodes) / n_nodes
+        cz = sum(n.z for n in self.nodes) / n_nodes
+
+        # Dirección del muro en el plano X-Y para proyectar
+        max_dist_xy = -1.0
+        dir_x, dir_y = 1.0, 0.0
+        for n in self.nodes:
+            dx = n.x - cx
+            dy = n.y - cy
+            dist_xy = math.sqrt(dx**2 + dy**2)
+            if dist_xy > max_dist_xy and dist_xy > 1e-6:
+                max_dist_xy = dist_xy
+                dir_x = dx / dist_xy
+                dir_y = dy / dist_xy
+
+        def get_angle(n):
+            u = (n.x - cx) * dir_x + (n.y - cy) * dir_y
+            v = n.z - cz
+            return math.atan2(v, u)
+
+        sorted_nodes = sorted(self.nodes, key=get_angle)
+
+        # Extraemos las coordenadas limitándolas estrictamente a no más de 4 decimales
+        x_coords = [round(n.x, 4) for n in sorted_nodes]
+        y_coords = [round(n.y, 4) for n in sorted_nodes]
+        z_coords = [round(n.z, 4) for n in sorted_nodes]
         
         # Formato: AddByCoord(NumberPoints, X, Y, Z, Name, PropName, UserName)
         # Dejamos el nombre vacío ("") para que ETABS asigne uno automático

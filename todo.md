@@ -1,5 +1,5 @@
 ## Pendientes
-- Agregar vigas con razon de azpecto <4 como shell
-- definir elementos por eje
-- hacer shellprocessor por eje
-- subdividir elementos por cruce con elementos perpendiculares
+- Sistema de grillas A sin prefijo
+- No reemplazar secciones que ya existan
+- Mejorar subdivisión horizontal de muros, para no extender más alla de lo necesario.
+
