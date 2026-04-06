@@ -25,27 +25,36 @@ class LoadFilter:
         if self.categories and category not in self.categories:
             return False
             
-        if section_obj:
-            if category == "walls" and self.thickness_walls:
-                t = getattr(section_obj, "thickness", None)
-                if t is not None:
-                    min_t, max_t = self.thickness_walls
-                    if not (min_t <= t <= max_t):
-                        return False
-                        
-            elif category == "slabs" and self.thickness_slabs:
-                t = getattr(section_obj, "thickness", None)
-                if t is not None:
-                    min_t, max_t = self.thickness_slabs
-                    if not (min_t <= t <= max_t):
-                        return False
-                        
-            elif category == "frames" and self.thickness_frames:
-                w = getattr(section_obj, "width", None)
-                h = getattr(section_obj, "height", None)
-                min_t, max_t = self.thickness_frames
-                if w is not None and h is not None:
-                    # Validar que al menos una de las dimensiones esté en el rango de espesores permitidos
-                    if not (min_t <= w <= max_t or min_t <= h <= max_t):
-                        return False
+        if category == "walls" and self.thickness_walls:
+            if not section_obj:
+                return False
+            t = getattr(section_obj, "thickness", None)
+            if t is None:
+                return False
+            min_t, max_t = self.thickness_walls
+            if not (min_t <= t <= max_t):
+                return False
+                
+        elif category == "slabs" and self.thickness_slabs:
+            if not section_obj:
+                return False
+            t = getattr(section_obj, "thickness", None)
+            if t is None:
+                return False
+            min_t, max_t = self.thickness_slabs
+            if not (min_t <= t <= max_t):
+                return False
+                
+        elif category == "frames" and self.thickness_frames:
+            if not section_obj:
+                return False
+            w = getattr(section_obj, "width", None)
+            h = getattr(section_obj, "height", None)
+            if w is None or h is None:
+                return False
+            min_t, max_t = self.thickness_frames
+            # Validar que al menos una de las dimensiones esté en el rango de espesores permitidos
+            if not (min_t <= w <= max_t or min_t <= h <= max_t):
+                return False
+
         return True

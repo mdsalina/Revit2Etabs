@@ -10,12 +10,24 @@ from services.grid_factory import GridFactory
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
 
+#0. modelo revit
+#1. muros con orificios
+#2. modelo losa muro viga
+#3. structural export
+#4. VM
+#5. VM calculo
+#6. VM Arq
+#7. VM Arq 3
+#8. Casa BN V2
+#9. las lilas
+#10. hualtatas
+
 test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
 SNAP_THRESHOLD=20 # Distancia angular máxima para que un elemento se considere parte de un ángulo canónico
-CANONICAL_ANGLES=[0,90]#[0,26,64,90,116,154] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
+CANONICAL_ANGLES=[0,26,64,90,116,154] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
 MAX_DISTANCE=0.3 # Tolerancia de distancia para agrupar nodos similares.
 LMIN=0.2 # Longitud mínima para elementos estructurales.
 DZ=1 # Desplazamiento vertical del modelo. Permite agregar 1m en piso base.
@@ -35,7 +47,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[2]}.json")
+    loader.load_json(f"data/{test[7]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -64,21 +76,24 @@ def run_pipeline():
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
-    optimizer.divide_walls_by_vertical_lines_and_perpendicular_elements() # optimizo los muros fusionando y dividiendo por niveles
-    optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
-    optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
-    optimizer.divide_walls_by_horizontal_lines()
+    optimizer.divide_walls_by_vertical_lines() # optimizo los muros fusionando y dividiendo por niveles
+    #optimizer.divide_walls_by_intersection_elements() # propaga fisicamente los cortes verticales
+    #optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
+    #optimizer.remove_orphan_nodes()
+    #optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
+    #optimizer.divide_walls_by_horizontal_linesV2()
 
     
     #viz.plot_model(show_nodes=False,show_grids=True)
-    #viz.plot_grid("A6", show_nodes=False, show_grids=True, show_levels=True)
+    #viz.plot_grid("AF", show_nodes=True, show_grids=True, show_levels=True)
+    viz.plot_grid("A22", show_nodes=True, show_grids=True, show_levels=True)
     #viz.plot_plan(level_id="L2", show_nodes=False, show_grids=True, show_slab=False)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
-    etabs_model.connect_active_etabs()
-    etabs_model.write_all()
+    #etabs_model.connect_active_etabs()
+    #etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 

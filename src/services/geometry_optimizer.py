@@ -224,6 +224,258 @@ class GeometryOptimizer:
         logger.info(f"GeometryOptimizer: Se optimizaron los muros por eje geométrico. "
                     f"Muros originales procesados: {len(walls_to_remove)}, Muros resultantes generados: {len(new_walls_total)}.")
 
+    def divide_walls_by_intersection_elements(self, tolerance=0.05):
+        """
+        Itera por todos los ejes y divide muros y vigas (walls, beams)
+        en los puntos de intersección con elementos de otros ejes perpendiculares o transversales.
+        Propagación vertical contigua selectiva.
+        """
+        from services.wall_processor import WallProcessor
+        from domain.elements.wall import WallElement
+        from domain.elements.frame import FrameElement
+        from shapely.geometry import Point, LineString
+        import numpy as np
+        
+        wp = WallProcessor(self.model)
+        
+        new_walls_total = []
+        walls_to_remove = set()
+        
+        new_beams_total = []
+        beams_to_remove = set()
+
+        # 1. Obtener mapeo inverso de elemento -> ejes (ignorando losas explícitamente)
+        element_to_grids = {}
+        for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+            for e in elements:
+                if e in self.model.slabs: continue
+                if e not in element_to_grids:
+                    element_to_grids[e] = set()
+                element_to_grids[e].add(grid_label)
+                
+        def get_external_nodes_for_grid(current_grid_label):
+            external_nodes = set()
+            for elem, grids in element_to_grids.items():
+                if current_grid_label not in grids or len(grids) > 1:
+                    nodes = getattr(elem, 'nodes', [getattr(elem, 'start_node', None), getattr(elem, 'end_node', None)])
+                    for n in nodes:
+                        if n is not None:
+                            external_nodes.add(n)
+            return list(external_nodes)
+
+        for grid_label, elements in list(self.model.grid_manager.grid_elements_map.items()):
+            # Obtener muros y vigas (no columnas) del eje actual
+            walls = [e for e in elements if isinstance(e, WallElement)]
+            beams = [e for e in elements if isinstance(e, FrameElement) and e not in self.model.columns]
+            
+            elements_g = walls + beams
+            if not elements_g:
+                continue
+
+            # Buscar objeto grid para obtener ecuación rho, theta
+            grid_obj = None
+            for system in self.model.grid_manager.systems:
+                for g in system.grids:
+                    if g.label == grid_label:
+                        grid_obj = g
+                        break
+                if grid_obj: break
+            if not grid_obj: continue
+
+            # Proyección 2D base para todo el eje (usando wp)
+            wp._project_to_2d(elements_g[0])
+            origin, u_axis, v_axis = wp._current_transform
+
+            # Mapear cada elemento a su geometría 2D
+            elem_geom = {}
+            for e in elements_g:
+                if isinstance(e, WallElement):
+                    poly = wp._project_element_with_transform(e, wp._current_transform)
+                    elem_geom[e] = poly.buffer(1e-4, cap_style=3, join_style=2)
+                elif isinstance(e, FrameElement):
+                    nodes_3d = getattr(e, 'nodes', [getattr(e, 'start_node', None), getattr(e, 'end_node', None)])
+                    pts_2d = []
+                    for n in nodes_3d:
+                        if n is None: continue
+                        rel_p = np.array([n.x, n.y, n.z]) - origin
+                        u = np.dot(rel_p, u_axis)
+                        v = np.dot(rel_p, v_axis)
+                        pts_2d.append((u, v))
+                    if len(pts_2d) == 2:
+                        elem_geom[e] = LineString(pts_2d).buffer(1e-4, cap_style=3, join_style=2)
+
+            # Grafo de adyacencia
+            adj = {e: [] for e in elements_g}
+            for i in range(len(elements_g)):
+                e1 = elements_g[i]
+                g1 = elem_geom.get(e1)
+                if not g1: continue
+                # Ampliamos ligeramente para asegurar toque físico
+                g1_exp = g1.buffer(0.05)
+                for j in range(i+1, len(elements_g)):
+                    e2 = elements_g[j]
+                    g2 = elem_geom.get(e2)
+                    if not g2: continue
+                    if g1_exp.intersects(g2):
+                        adj[e1].append(e2)
+                        adj[e2].append(e1)
+
+            # Nodos externos validos
+            external_nodes = get_external_nodes_for_grid(grid_label)
+            theta_rad = np.radians((grid_obj.angle_deg + 90) % 180)
+            
+            cuts_to_apply = {e: set() for e in elements_g}
+            
+            for ext_node in external_nodes:
+                # Verificar si está en la línea de la grilla principal
+                node_rho = ext_node.x * np.cos(theta_rad) + ext_node.y * np.sin(theta_rad)
+                if abs(node_rho - grid_obj.rho) > tolerance:
+                    continue
+                
+                # Proyección 2D del nodo externo
+                rel_p = np.array([ext_node.x, ext_node.y, ext_node.z]) - origin
+                u_node = np.dot(rel_p, u_axis)
+                v_node = np.dot(rel_p, v_axis)
+                pt_node = Point(u_node, v_node)
+                
+                # Identificar elementos iniciales (en contacto directo)
+                initial_elements = []
+                for e in elements_g:
+                    geom = elem_geom.get(e)
+                    # Toleramos una pequeña distancia (~5cm) para contacto
+                    if geom and geom.buffer(tolerance).intersects(pt_node):
+                        # Validación: ¿Rechazar si el nodo ext coincide con un nodo existente de ESTE elemento?
+                        nodes_e = getattr(e, 'nodes', [getattr(e, 'start_node', None), getattr(e, 'end_node', None)])
+                        conflict = False
+                        for ne in nodes_e:
+                            if ne is None: continue
+                            dist_3d = ((ne.x - ext_node.x)**2 + (ne.y - ext_node.y)**2 + (ne.z - ext_node.z)**2)**0.5
+                            if dist_3d < tolerance:
+                                conflict = True
+                                break
+                        if not conflict:
+                            initial_elements.append(e)
+
+                if not initial_elements:
+                    continue
+
+                # Propagación (BFS) horizontalmente contenidos y limitados a adyacencia
+                visited = set(initial_elements)
+                queue = list(initial_elements)
+                component = []
+                
+                # Línea vertical del corte para chequear si el vecino es intersectado
+                cut_line_2d = LineString([(u_node, -10000), (u_node, 10000)])
+                
+                while queue:
+                    curr = queue.pop(0)
+                    component.append(curr)
+                    for neighbor in adj[curr]:
+                        if neighbor not in visited:
+                            # ¿El vecino cruza la línea vertical de corte?
+                            geom_n = elem_geom.get(neighbor)
+                            if geom_n and geom_n.intersects(cut_line_2d):
+                                visited.add(neighbor)
+                                queue.append(neighbor)
+                
+                # Acumulamos el corte para todos los del componente
+                for e in component:
+                    cuts_to_apply[e].add(u_node)
+
+            # Ejecutar los cortes para los elementos en este eje
+            for e, u_cuts in cuts_to_apply.items():
+                if not u_cuts:
+                    continue
+                
+                if isinstance(e, WallElement):
+                    wp._current_transform = (origin, u_axis, v_axis)
+                    poly = wp._project_element_with_transform(e, wp._current_transform)
+                    rects_2d = [poly]
+                    
+                    if wp.should_split_by_levels:
+                        rects_2d = wp._apply_level_splitting(rects_2d)
+                        
+                    rects_2d = wp._apply_vertical_splitting(rects_2d, sorted(list(u_cuts)))
+                    
+                    # Filtramos descartando siluetas o rectángulos microscópicos (ej. cortes muy pegados a un nodo)
+                    valid_rects = [r for r in rects_2d if r.area >= 1e-4]
+                    
+                    # Si el corte fue efectivo dentro de los bounds
+                    if len(valid_rects) > 1 or wp.should_split_by_levels:
+                        for rect in valid_rects:
+                            new_wall = wp._create_structural_element(rect, e)
+                            new_walls_total.append(new_wall)
+                        walls_to_remove.add(e)
+                        
+                elif isinstance(e, FrameElement):
+                    dx = e.end_node.x - e.start_node.x
+                    dy = e.end_node.y - e.start_node.y
+                    dz = e.end_node.z - e.start_node.z
+                    length = (dx**2 + dy**2 + dz**2)**0.5
+                    if length == 0: continue
+                    
+                    rel_start = np.array([e.start_node.x, e.start_node.y, e.start_node.z]) - origin
+                    u_start = np.dot(rel_start, u_axis)
+                    
+                    rel_end = np.array([e.end_node.x, e.end_node.y, e.end_node.z]) - origin
+                    u_end = np.dot(rel_end, u_axis)
+                    
+                    valid_cuts = []
+                    for u_cut in u_cuts:
+                        u_min = min(u_start, u_end)
+                        u_max = max(u_start, u_end)
+                        if u_min + 1e-3 < u_cut < u_max - 1e-3:
+                            t = (u_cut - u_start) / (u_end - u_start)
+                            cx = e.start_node.x + t * dx
+                            cy = e.start_node.y + t * dy
+                            cz = e.start_node.z + t * dz
+                            dist = t * length
+                            valid_cuts.append((dist, cx, cy, cz))
+                    
+                    if valid_cuts:
+                        valid_cuts.sort(key=lambda x: x[0])
+                        current_start = e.start_node
+                        for dist, cx, cy, cz in valid_cuts:
+                            cut_node = self.model.node_manager.get_or_create_node(cx, cy, cz)
+                            new_beam = FrameElement(
+                                revit_id=e.revit_id,
+                                section=e.section,
+                                level=e.level,
+                                node_start=current_start,
+                                node_end=cut_node
+                            )
+                            new_beams_total.append(new_beam)
+                            current_start = cut_node
+                            
+                        last_beam = FrameElement(
+                            revit_id=e.revit_id,
+                            section=e.section,
+                            level=e.level,
+                            node_start=current_start,
+                            node_end=e.end_node
+                        )
+                        new_beams_total.append(last_beam)
+                        beams_to_remove.add(e)
+
+        # Aplicamos cambios al modelo en Muros
+        if walls_to_remove:
+            self.model.walls = [w for w in self.model.walls if w not in walls_to_remove]
+            self.model.walls.extend(new_walls_total)
+            
+        # Aplicamos cambios al modelo en Vigas
+        if beams_to_remove:
+            self.model.beams = [b for b in self.model.beams if b not in beams_to_remove]
+            self.model.beams.extend(new_beams_total)
+            
+        if walls_to_remove or beams_to_remove:
+            self.model.node_manager.reindex()
+            # Remapear elementos a las grillas para consistencia
+            self.model.grid_manager.map_elements_to_grids(tolerance=tolerance)
+            
+        logger.info(f"GeometryOptimizer: División por elementos de intersección propagada.\n"
+                    f"Muros removidos: {len(walls_to_remove)}, Muros nuevos: {len(new_walls_total)} | "
+                    f"Vigas removidas: {len(beams_to_remove)}, Vigas nuevas: {len(new_beams_total)}.")
+
     def divide_walls_by_horizontal_lines(self):
         """
         Recorre todos los ejes del proyecto y toma los muros asociados a cada uno.
@@ -324,6 +576,165 @@ class GeometryOptimizer:
         
         logger.info(f"GeometryOptimizer: División horizontal de muros aplicada. "
                     f"Muros cortados: {len(walls_to_remove)}, Muros resultantes: {len(new_walls_total)}.")
+
+    def divide_walls_by_horizontal_linesV2(self):
+        """
+        Versión 2 del corte horizontal.
+        Resuelve el problema de muros en forma de "U" evaluando la conectividad horizontal
+        piso por piso. Si dos alas de un muro no se tocan en el piso N, un corte en una
+        de las alas no se propagará a la otra.
+        Acumula las elevaciones de corte (Z) aplicables para cada muro y lo corta una sola vez.
+        """
+        from services.wall_processor import WallProcessor
+        from domain.elements.wall import WallElement
+        from shapely.geometry import Point, Polygon, MultiPolygon, GeometryCollection, box
+        from shapely.ops import unary_union
+        import numpy as np
+        
+        wp = WallProcessor(self.model)
+        new_walls_total = []
+        walls_to_remove = set()
+        
+        # Obtener y ordenar cotas Z de los pisos del modelo
+        story_zs = sorted([s.elevation for s in self.model.story_manager.stories])
+        
+        for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+            walls = [e for e in elements if isinstance(e, WallElement)]
+            if not walls:
+                continue
+                
+            wp._project_to_2d(walls[0])
+            origin, u_axis, v_axis = wp._current_transform
+            origin_z = origin[2]
+            
+            # Crear polígonos originales
+            wall_polys = []
+            for w in walls:
+                poly = wp._project_element_with_transform(w, wp._current_transform)
+                if not poly.is_valid:
+                    from shapely.validation import make_valid
+                    poly = make_valid(poly)
+                wall_polys.append((w, poly))
+                
+            # Diccionario para acumular Z de cortes aplicables a cada muro individual
+            wall_cuts = {w: set() for w in walls}
+            
+            # Recolectar (node_pts) de todos los elementos para ver dónde caen
+            grid_nodes = set()
+            for e in elements:
+                if hasattr(e, 'nodes'):
+                    for n in e.nodes:
+                        if n is not None:
+                            grid_nodes.add(n)
+                            
+            node_pts = []
+            for n in grid_nodes:
+                rel_p = np.array([n.x, n.y, n.z]) - origin
+                u = np.dot(rel_p, u_axis)
+                v = np.dot(rel_p, v_axis)
+                node_pts.append((n, Point(u, v)))
+                
+            # Crear listas de franjas de pisos (Strips 2D)
+            # Agregamos cotas infinitas para cubrir debajo del P1 y sobre la azotea
+            v_elevs = [-10000.0] + [z - origin_z for z in story_zs] + [10000.0]
+            
+            for i in range(len(v_elevs) - 1):
+                bottom_v = v_elevs[i]
+                top_v = v_elevs[i+1]
+                strip_poly = box(-1000, bottom_v, 1000, top_v)
+                
+                # Interceptar cada muro con la franja de este piso
+                frags = []
+                w_to_frag = {}
+                for w, poly in wall_polys:
+                    try:
+                        frag = poly.intersection(strip_poly)
+                    except Exception:
+                        poly = poly.buffer(0)
+                        frag = poly.intersection(strip_poly)
+                        
+                    if not frag.is_empty:
+                        if not frag.is_valid:
+                            from shapely.validation import make_valid
+                            frag = make_valid(frag)
+                            if hasattr(frag, 'geoms'):
+                                frag = unary_union([g for g in frag.geoms if isinstance(g, Polygon)])
+                        frags.append(frag.buffer(1e-4, cap_style=3, join_style=2))
+                        w_to_frag[w] = frag
+                        
+                if not frags:
+                    continue
+                    
+                # Crear máscara solidaria SÓLO para los pedazos en este piso
+                merged_frag = unary_union(frags).buffer(-1e-4, cap_style=3, join_style=2)
+                masks = []
+                if isinstance(merged_frag, Polygon):
+                    masks.append(merged_frag)
+                elif hasattr(merged_frag, 'geoms'):
+                    masks.extend([g for g in merged_frag.geoms if isinstance(g, Polygon)])
+                    
+                for mask in masks:
+                    # ¿Qué pedazos de muro pertenecen a esta máscara?
+                    if not mask.is_valid:
+                        from shapely.validation import make_valid
+                        mask = make_valid(mask)
+                    mask_buf = mask.buffer(1e-3)
+                    
+                    mask_walls = []
+                    for w, frag in w_to_frag.items():
+                        try:
+                            if mask_buf.intersects(frag):
+                                mask_walls.append(w)
+                        except Exception:
+                            # Fallback seguro para TopologyException
+                            try:
+                                if mask.distance(frag) < 2e-3:
+                                    mask_walls.append(w)
+                            except Exception:
+                                pass
+                                
+                    if not mask_walls:
+                        continue
+                        
+                    # Filtrar los nodos que caen DENTRO de esta máscara en este piso
+                    # Usamos mask ampliada ligeramente (+5cm) para tolerar nodos pegados a los bordes
+                    mask_expanded = mask.buffer(0.05)
+                    mask_zs = set()
+                    
+                    for n, pt in node_pts:
+                        try:
+                            if mask_expanded.intersects(pt):
+                                mask_zs.add(n.z)
+                        except Exception:
+                            try:
+                                if mask.distance(pt) < 0.055:
+                                    mask_zs.add(n.z)
+                            except Exception:
+                                pass
+                                
+                    # Acumular las elevaciones descubiertas a los muros afectados
+                    for w in mask_walls:
+                        wall_cuts[w].update(mask_zs)
+                        
+            # Finalmente, ejecutar los cortes acumulados muro por muro
+            for w, zs in wall_cuts.items():
+                if zs:
+                    new_walls = wp.divide_by_z(w, list(zs))
+                    if len(new_walls) > 1:
+                        new_walls_total.extend(new_walls)
+                        walls_to_remove.add(w)
+                        
+        # Actualizar el modelo
+        self.model.walls = [w for w in self.model.walls if w not in walls_to_remove]
+        self.model.walls.extend(new_walls_total)
+        
+        # Re-indexar y remapear
+        self.model.node_manager.reindex()
+        self.model.grid_manager.map_elements_to_grids()
+        
+        logger.info(f"GeometryOptimizer V2: Se optimizaron los muros horizontalmente aislados por piso. "
+                    f"Muros cortados: {len(walls_to_remove)}, Muros resultantes: {len(new_walls_total)}.")
+
 
     def divide_walls_by_vertical_lines_and_perpendicular_elements(self, tolerance=0.05):
         """
