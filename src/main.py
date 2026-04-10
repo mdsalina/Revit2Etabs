@@ -21,8 +21,9 @@ logger = setup_logger()
 #8. Casa BN V2
 #9. las lilas
 #10. hualtatas
+#11. juan pineda
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas','juan_pineda']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
@@ -47,12 +48,12 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[7]}.json")
+    loader.load_json(f"data/{test[11]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
     
-    #viz.plot_model(show_nodes=False)
+    #viz.plot_model(show_nodes=True)
 
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
 
@@ -68,6 +69,7 @@ def run_pipeline():
     optimizer.remove_short_elements(LMIN) #hago una nueva depuración geométrica luego del desplazamiento y ajuste a la grilla
     optimizer.remove_elements_below_base(tolerance=0.01)
     optimizer.snap_z_to_levels(tolerance=DZ_LEVEL)
+    optimizer.merge_duplicate_nodes()  # fusiona nodos duplicados tras snap_nodes + snap_z_to_levels
     optimizer.remove_short_walls(min_height=LMIN)
     optimizer.remove_orphan_nodes()
     
@@ -76,18 +78,19 @@ def run_pipeline():
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
+    #viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
     optimizer.divide_walls_by_vertical_lines() # optimizo los muros fusionando y dividiendo por niveles
-    #optimizer.divide_walls_by_intersection_elements() # propaga fisicamente los cortes verticales
-    #optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
-    #optimizer.remove_orphan_nodes()
-    #optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
-    #optimizer.divide_walls_by_horizontal_linesV2()
-
+    viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
+    optimizer.split_by_intersection() # propaga fisicamente los cortes verticales
+    viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
+    optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
+    optimizer.remove_orphan_nodes()
+    optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
+    optimizer.divide_walls_by_horizontal_lines()
     
     #viz.plot_model(show_nodes=False,show_grids=True)
-    #viz.plot_grid("AF", show_nodes=True, show_grids=True, show_levels=True)
-    viz.plot_grid("A22", show_nodes=True, show_grids=True, show_levels=True)
-    #viz.plot_plan(level_id="L2", show_nodes=False, show_grids=True, show_slab=False)
+    #viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
+    #viz.plot_plan(level_id="L4", show_nodes=True, show_grids=True, show_slab=False)
      
     # 3. Escribimos en ETABS (Manos)
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")

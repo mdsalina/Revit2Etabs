@@ -194,10 +194,13 @@ class BaseShellProcessor(ABC):
         
         # 2. Proyectar todos los elementos al sistema local del base_element
         polys_2d = []
+        element_poly_map = []
         for elem in original_elements:
             poly = self._project_element_with_transform(elem, self._current_transform)
             # Solución a fallos de precisión de punto flotante en aristas compartidas
-            polys_2d.append(poly.buffer(1e-4, cap_style=3, join_style=2))
+            buf_poly = poly.buffer(1e-4, cap_style=3, join_style=2)
+            polys_2d.append(buf_poly)
+            element_poly_map.append((elem, buf_poly))
             
         # Unificar polígonos
         merged_poly = unary_union(polys_2d)
@@ -212,10 +215,23 @@ class BaseShellProcessor(ABC):
         if extra_xs:
             rects_2d = self._apply_vertical_splitting(rects_2d, sorted(list(extra_xs)))
             
-        # 4. Crear nuevos elementos estructurales, todos toman propiedades del base_element por defecto
+        # 4. Crear nuevos elementos estructurales, determinando dinámicamente su parent
         new_elements = []
         for rect in rects_2d:
-            element = self._create_structural_element(rect, base_element)
+            centroide = rect.centroid
+            chosen_parent = base_element # fallback
+
+            # Buscamos de qué elemento topológico provino este rectángulo
+            for elem, original_poly in element_poly_map:
+                if original_poly.contains(centroide):
+                    chosen_parent = elem
+                    break
+
+            element = self._create_structural_element(rect, chosen_parent)
+            
+            if hasattr(element, "section"):
+                element.section = str(chosen_parent.section)
+                
             new_elements.append(element)
             
         return new_elements
