@@ -10,7 +10,6 @@ class WallProcessor(BaseShellProcessor):
     def _create_structural_element(self, rect_poly, parent_wall):
         """
         Analiza el rectángulo 2D, lo convierte a 3D y decide 
-        si crear un WallElement (Muro) o un FrameElement (Viga).
         """
         # --- A. Conversión a 3D ---
         u_coords, v_coords = rect_poly.exterior.coords.xy

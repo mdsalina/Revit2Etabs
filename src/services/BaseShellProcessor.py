@@ -204,7 +204,7 @@ class BaseShellProcessor(ABC):
             
         # Unificar polígonos
         merged_poly = unary_union(polys_2d)
-        merged_poly = merged_poly.buffer(-1e-4, cap_style=3, join_style=2)
+        #merged_poly = merged_poly.buffer(-1e-4, cap_style=3, join_style=2) #esto me trajo puros problemas
         
         # 3. Pipeline de Shapely
         rects_2d = self._run_shapely_pipeline(merged_poly, split_direction=split_direction)

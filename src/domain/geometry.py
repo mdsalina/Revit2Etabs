@@ -42,6 +42,13 @@ class NodeManager:
             
         return self.nodes[key]
 
+    def get_node_by_id(self, node_id):
+        """Busca un nodo por su ID."""
+        for node in self.nodes.values():
+            if node.id == node_id:
+                return node
+        return None
+
     def fix_nodes(self, new_tolerance):
         """
         Método olicitado para fusionar nodos cercanos.

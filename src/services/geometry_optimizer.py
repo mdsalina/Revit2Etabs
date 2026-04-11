@@ -238,7 +238,8 @@ class GeometryOptimizer:
         walls_to_remove = set()
         
         for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
-            walls = [e for e in elements if isinstance(e, WallElement)]
+            # Evitar procesar nuevamente muros que ya fueron reemplazados al procesar un eje anterior
+            walls = [e for e in elements if isinstance(e, WallElement) and e not in walls_to_remove]
             if not walls:
                 continue
                 
@@ -248,18 +249,16 @@ class GeometryOptimizer:
                 new_walls_total.extend(new_walls)
                 for w in walls:
                     walls_to_remove.add(w)
-                
-                # Actualizar el mapa de grillas para este eje
-                remaining_elements = [e for e in elements if e not in walls]
-                remaining_elements.extend(new_walls)
-                self.model.grid_manager.grid_elements_map[grid_label] = remaining_elements
                     
         # Actualizar el modelo
         self.model.walls = [w for w in self.model.walls if w not in walls_to_remove]
         self.model.walls.extend(new_walls_total)
         
-        # Re-indexar los nodos en caso de que WallProcessor haya creado nuevos
-        self.model.node_manager.reindex()
+        # 1. Fusionamos posibles nodos duplicados y propagamos a todas las referencias (muros, vigas, etc)
+        self.merge_duplicate_nodes()
+        # 2. Remapear globalmente todos los elementos a las grillas correspondientes,
+        # limpiando las referencias de los muros viejos o duplicados en otros ejes.
+        self.model.grid_manager.map_elements_to_grids()
         
         logger.info(f"GeometryOptimizer: Se optimizaron los muros por eje geométrico. "
                     f"Muros originales procesados: {len(walls_to_remove)}, Muros resultantes generados: {len(new_walls_total)}.")
@@ -672,7 +671,7 @@ class GeometryOptimizer:
             logger.info(f"GeometryOptimizer: Se fusionaron e intercambiaron {len(walls_to_remove)} muros esbeltos "
                         f"por {len(beams_to_add)} vigas equivalentes (Spandrels).")
 
-    def split_by_intersection(self, tolerance_intersection=0.01):
+    def split_by_intersection(self, tolerance_intersection=0.01, only_walls=True):
         """
         Divide verticalmente los elementos de un eje (vigas y muros) en los puntos
         de intersección con elementos de otros ejes. Considera no realizar divisiones
@@ -689,6 +688,17 @@ class GeometryOptimizer:
         wp = WallProcessor(self.model)
         split_count_beams = 0
         split_count_walls = 0
+       
+        niveles_z = [s.elevation for s in self.model.story_manager.stories]
+        
+        nodos_validos_globales = set()
+        if only_walls:
+            for w in self.model.walls:
+                if hasattr(w, 'nodes') and w.nodes:
+                    for n in w.nodes:
+                        if n is not None: nodos_validos_globales.add(n)
+        else:
+            nodos_validos_globales = set(self.model.node_manager.nodes.values())
 
         for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
             if not elements:
@@ -696,7 +706,7 @@ class GeometryOptimizer:
                 
             # Identificación de la directriz del eje 2D
             ref_e = elements[0]
-            if hasattr(ref_e, 'start_node'):
+            if hasattr(ref_e, 'start_node') and ref_e.start_node and ref_e.end_node:
                 n1, n2 = ref_e.start_node, ref_e.end_node
             else:
                 continue
@@ -715,17 +725,36 @@ class GeometryOptimizer:
                     for n in e.nodes:
                         if n is not None: nodos_propios_eje.add(n)
                 if hasattr(e, 'start_node'):
-                    nodos_propios_eje.add(e.start_node)
-                    nodos_propios_eje.add(e.end_node)
+                    if e.start_node: nodos_propios_eje.add(e.start_node)
+                    if e.end_node: nodos_propios_eje.add(e.end_node)
+
+            if not nodos_propios_eje:
+                continue
+                
+            # Límites a lo largo de la directriz para descartar nodos fuera del eje
+            u_coords_propios = [np.dot(np.array([n.x - n1.x, n.y - n1.y]), v_dir) for n in nodos_propios_eje]
+            min_u_eje = min(u_coords_propios) - 0.15
+            max_u_eje = max(u_coords_propios) + 0.15
 
             nodos_totales_en_eje = set()
-            for n in self.model.node_manager.nodes.values():
-                vec = np.array([n.x - n1.x, n.y - n1.y])
-                dist_to_axis = abs(np.dot(vec, u_dir))
+            for n in nodos_validos_globales:
+                # Filtrar nodos a media altura (no coinciden con niveles)
+                if not any(abs(n.z - z_lvl) < 0.15 for z_lvl in niveles_z):
+                    continue
+                    
+                vec_n = np.array([n.x - n1.x, n.y - n1.y])
+                
+                # Filtrar nodos fuera de la extensión longitudinal del eje
+                u_loc = np.dot(vec_n, v_dir)
+                if not (min_u_eje <= u_loc <= max_u_eje):
+                    continue
+                    
+                # Distancia perpendicular al eje
+                dist_to_axis = abs(np.dot(vec_n, u_dir))
                 if dist_to_axis < 0.15: # Usamos tolerancia de distancia para ejes
                     nodos_totales_en_eje.add(n)
 
-            # Nodos que vienen de elementos en otros ejes (ignorando los que caen casi sobre nodos propios según tolerancia)
+            # Nodos que vienen de elementos en otros ejes (ignorando los propios con tolerancia estricta)
             nodos_interseccion = set()
             for n_tot in nodos_totales_en_eje:
                 es_propio = False
@@ -745,7 +774,6 @@ class GeometryOptimizer:
             vigas_a_remover = set()
             vigas_a_agregar = []
             
-
             for viga in vigas_eje:
                 vec_viga = np.array([viga.end_node.x - viga.start_node.x, viga.end_node.y - viga.start_node.y])
                 L_viga = np.linalg.norm(vec_viga)

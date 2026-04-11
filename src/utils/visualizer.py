@@ -187,10 +187,19 @@ class StructuralVisualizer:
         ax.set_ylim3d([np.mean(y_limits) - plot_radius, np.mean(y_limits) + plot_radius])
         ax.set_zlim3d([np.mean(z_limits) - plot_radius, np.mean(z_limits) + plot_radius])
     
-    def plot_grid(self, grid_label, show_nodes=False, show_grids=True, show_levels=True):
+    def plot_grid(self, grid_label, show_nodes=False, show_grids=True, show_levels=True, id_walls=None, id_beams=None, id_nodes=None):
         """
         Grafica en 2D la elevación de un eje en específico.
         """
+        if id_walls is None: id_walls = []
+        if id_beams is None: id_beams = []
+        if id_nodes is None: id_nodes = []
+        
+        # Normalizamos a sets de IDs por si se pasaron objetos en lugar de IDs
+        id_walls = {getattr(w, 'revit_id', getattr(w, 'id', w)) for w in id_walls}
+        id_beams = {getattr(b, 'revit_id', getattr(b, 'id', b)) for b in id_beams}
+        id_nodes = {getattr(n, 'id', n) for n in id_nodes}
+        
         # 1. Buscar la grilla por su label
         grid_manager = self.model.grid_manager
         target_grid = None
@@ -227,8 +236,14 @@ class StructuralVisualizer:
         all_z = []
         
         # Graficar elementos
+        plotted_nodes = set()
         for elem in elements:
+            elem_id = getattr(elem, 'revit_id', getattr(elem, 'id', None))
+            
             if elem in self.model.beams or elem in self.model.columns:
+                if id_beams and elem_id not in id_beams:
+                    continue
+                
                 h1, z1 = project_node(elem.start_node)
                 h2, z2 = project_node(elem.end_node)
                 
@@ -242,11 +257,23 @@ class StructuralVisualizer:
                 all_z.extend([z1, z2])
                 
                 if show_nodes:
-                    ax.scatter([h1, h2], [z1, z2], color='black', s=20, zorder=5)
-                    ax.text(h1, z1, str(elem.start_node.id), fontsize=7, color='darkred')
-                    ax.text(h2, z2, str(elem.end_node.id), fontsize=7, color='darkred')
+                    if not id_nodes or elem.start_node.id in id_nodes:
+                        color_n = 'blue' if id_nodes else 'black'
+                        text_c = 'darkblue' if id_nodes else 'darkred'
+                        ax.scatter([h1], [z1], color=color_n, s=20, zorder=5)
+                        ax.text(h1, z1, str(elem.start_node.id), fontsize=7, color=text_c)
+                        plotted_nodes.add(elem.start_node.id)
+                    if not id_nodes or elem.end_node.id in id_nodes:
+                        color_n = 'blue' if id_nodes else 'black'
+                        text_c = 'darkblue' if id_nodes else 'darkred'
+                        ax.scatter([h2], [z2], color=color_n, s=20, zorder=5)
+                        ax.text(h2, z2, str(elem.end_node.id), fontsize=7, color=text_c)
+                        plotted_nodes.add(elem.end_node.id)
                     
             elif elem in self.model.walls:
+                if id_walls and elem_id not in id_walls:
+                    continue
+                
                 # Proyectar los nodos del muro
                 polygon_h = []
                 polygon_z = []
@@ -258,8 +285,12 @@ class StructuralVisualizer:
                     all_z.append(z)
                     
                     if show_nodes:
-                        ax.scatter([h], [z], color='black', s=20, zorder=5)
-                        ax.text(h, z, str(n.id), fontsize=7, color='darkred')
+                        if not id_nodes or n.id in id_nodes:
+                            color_n = 'blue' if id_nodes else 'black'
+                            text_c = 'darkblue' if id_nodes else 'darkred'
+                            ax.scatter([h], [z], color=color_n, s=20, zorder=5)
+                            ax.text(h, z, str(n.id), fontsize=7, color=text_c)
+                            plotted_nodes.add(n.id)
                 
                 if len(polygon_h) > 0:
                     polygon_h.append(polygon_h[0])
@@ -267,6 +298,18 @@ class StructuralVisualizer:
                     ax.plot(polygon_h, polygon_z, color='darkred', linewidth=1)
                     ax.fill(polygon_h, polygon_z, color='red', alpha=0.3)
         
+        # Graficar nodos adicionales que estén en id_nodes pero no pertenezcan a los elementos ya graficados
+        if show_nodes and id_nodes:
+            for node_id in id_nodes:
+                if node_id not in plotted_nodes:
+                    node = self.model.node_manager.get_node_by_id(node_id)
+                    if node:
+                        h, z = project_node(node)
+                        ax.scatter([h], [z], color='blue', s=30, zorder=6)
+                        ax.text(h, z, f" {node.id}", fontsize=8, color='blue', fontweight='bold', va='bottom')
+                        all_h.append(h)
+                        all_z.append(z)
+
         # Graficar Niveles
         if show_levels and hasattr(self.model, 'story_manager') and self.model.story_manager.stories:
             h_min = min(all_h) if all_h else 0

@@ -34,6 +34,7 @@ LMIN=0.2 # Longitud mínima para elementos estructurales.
 DZ=1 # Desplazamiento vertical del modelo. Permite agregar 1m en piso base.
 DZ_LEVEL=0.35 # Tolerancia de distancia para ajustar la altura de los nodos a los niveles.
 BEAM_GRID=False # Si es True, se genera una grilla para vigas.
+DIVIDE_ONLY_WALLS_BY_INTERSECTION=True # Si es True, se divide los muros por intersección de vigas
 
 def run_pipeline(): 
     # 1. Creamos el modelo (Cerebro)
@@ -78,25 +79,22 @@ def run_pipeline():
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
-    #viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
     optimizer.divide_walls_by_vertical_lines() # optimizo los muros fusionando y dividiendo por niveles
-    viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
-    optimizer.split_by_intersection() # propaga fisicamente los cortes verticales
-    viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
+    optimizer.split_by_intersection(only_walls=DIVIDE_ONLY_WALLS_BY_INTERSECTION) # propaga fisicamente los cortes verticales
     optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
     optimizer.remove_orphan_nodes()
     optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
     optimizer.divide_walls_by_horizontal_lines()
     
-    #viz.plot_model(show_nodes=False,show_grids=True)
-    #viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True)
-    #viz.plot_plan(level_id="L4", show_nodes=True, show_grids=True, show_slab=False)
+    #viz.plot_model(show_nodes=False,show_grids=True)  #ploteo modelo completo
+    #viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True) #ploteo grilla específica
+    #viz.plot_plan(level_id="L4", show_nodes=True, show_grids=True, show_slab=False) #ploteo planta específica
      
-    # 3. Escribimos en ETABS (Manos)
+    # 3. Escribimos en ETABS
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
-    #etabs_model.connect_active_etabs()
-    #etabs_model.write_all()
+    etabs_model.connect_active_etabs()
+    etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 
