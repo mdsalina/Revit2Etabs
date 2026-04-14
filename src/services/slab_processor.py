@@ -19,4 +19,5 @@ class SlabProcessor(BaseShellProcessor):
         # Eliminamos el último punto porque Shapely cierra el polígono (P5 = P1)
         nodes_3d = nodes_3d[:-1]
 
-        return SlabElement(parent_slab.revit_id, parent_slab.section,parent_slab.level, nodes_3d)
+        new_id = self.model.element_manager.assign_id('Slab')
+        return SlabElement(new_id, parent_slab.section, parent_slab.level, nodes_3d, parent_slab.revit_id)

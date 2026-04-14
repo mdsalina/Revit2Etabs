@@ -2,8 +2,8 @@ from .base import StructuralElement
 import math
 
 class SlabElement(StructuralElement):
-    def __init__(self, revit_id, section, level, nodes):
-        super().__init__(revit_id, section, level)
+    def __init__(self, id, section, level, nodes, revit_id=None):
+        super().__init__(id, section, level, revit_id)
         self.nodes = nodes # Lista de objetos clase Node
 
     def get_angle(self):

@@ -471,11 +471,13 @@ class GeometryOptimizer:
                     n3 = self.model.node_manager.get_or_create_node(n2.x, n2.y, n2.z + z_dir * h)
                     n4 = self.model.node_manager.get_or_create_node(n1.x, n1.y, n1.z + z_dir * h)
                     
+                    new_id = self.model.element_manager.assign_id('Wall')
                     new_wall = WallElement(
-                        revit_id=beam.revit_id,
+                        id=new_id,
                         section=new_sec_name,
                         level=beam.level,
-                        nodes=[n1, n2, n3, n4]
+                        nodes=[n1, n2, n3, n4],
+                        revit_id=beam.revit_id
                     )
                     
                     walls_to_add.append(new_wall)
@@ -649,12 +651,14 @@ class GeometryOptimizer:
                     )
                 
                 # 6. Crear Viga y planificar la remoción de los muros
+                new_id = self.model.element_manager.assign_id('Frame')
                 new_beam = FrameElement(
-                    revit_id=comp[0].revit_id,
+                    id=new_id,
                     section=sec_name,
                     level=comp[0].level,
                     node_start=n1_3d,
-                    node_end=n2_3d
+                    node_end=n2_3d,
+                    revit_id=comp[0].revit_id
                 )
                 
                 beams_to_add.append(new_beam)
@@ -800,13 +804,15 @@ class GeometryOptimizer:
                         p_y = viga.start_node.y + u_val * u_viga[1]
                         new_node = self.model.node_manager.get_or_create_node(p_x, p_y, viga.start_node.z)
                         
-                        v = FrameElement(revit_id=viga.revit_id, section=viga.section, level=viga.level, node_start=last_node, node_end=new_node)
+                        new_id = self.model.element_manager.assign_id('Frame')
+                        v = FrameElement(id=new_id, section=viga.section, level=viga.level, node_start=last_node, node_end=new_node, revit_id=viga.revit_id)
                         v.section = str(viga.section)
                         nuevas_vigas.append(v)
                         last_node = new_node
                     
                     # Último tramo
-                    v_fin = FrameElement(revit_id=viga.revit_id, section=viga.section, level=viga.level, node_start=last_node, node_end=viga.end_node)
+                    new_id = self.model.element_manager.assign_id('Frame')
+                    v_fin = FrameElement(id=new_id, section=viga.section, level=viga.level, node_start=last_node, node_end=viga.end_node, revit_id=viga.revit_id)
                     v_fin.section = str(viga.section)
                     nuevas_vigas.append(v_fin)
                     
@@ -945,7 +951,8 @@ class GeometryOptimizer:
                         nodes_3d.append(n)
                     
                     # Instanciar puramente el Elemento sin pasar por el pesado WallProcessor que acarrea el Poligono2D
-                    new_w = WallElement(revit_id=muro.revit_id, section=muro.section, level=muro.level, nodes=nodes_3d)
+                    new_id = self.model.element_manager.assign_id('Wall')
+                    new_w = WallElement(id=new_id, section=muro.section, level=muro.level, nodes=nodes_3d, revit_id=muro.revit_id)
                     new_w.section = str(muro.section)
                     if hasattr(new_w, 'get_start_node_end_node'): new_w.get_start_node_end_node()
                     

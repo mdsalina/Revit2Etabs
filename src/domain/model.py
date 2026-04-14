@@ -1,4 +1,4 @@
-from .geometry import NodeManager
+from .geometry import NodeManager, ElementManager
 from .elements.frame import FrameElement
 from .elements.wall import WallElement
 from .elements.slab import SlabElement
@@ -19,6 +19,7 @@ class Model:
         self.name = name
         # El manager de nodos vive dentro del modelo
         self.node_manager = NodeManager(tolerance=0.005) # 5mm por defecto
+        self.element_manager = ElementManager()
         self.wall_processor = WallProcessor(self)
         self.slab_processor = SlabProcessor(self)
         self.grid_manager = GridManager(self)
@@ -34,7 +35,7 @@ class Model:
         self.walls = []
         self.slabs = []
  
-    def add_beam(self, revit_id, section, level, p1, p2):
+    def add_beam(self, section, level, p1, p2, revit_id=None):
         """
         Crea una instancia de FrameElement. p1 y p2 son tuplas (x, y, z).
         """
@@ -42,7 +43,8 @@ class Model:
         n1 = self.node_manager.get_or_create_node(*p1)
         n2 = self.node_manager.get_or_create_node(*p2)
         
-        beam = FrameElement(revit_id, section, level, n1, n2)
+        element_id = self.element_manager.assign_id('Frame')
+        beam = FrameElement(element_id, section, level, n1, n2, revit_id)
         self.beams.append(beam)
         self.node_manager.register_connection(n1.id, round(beam.get_angle() % 180, 2))
         self.node_manager.register_connection(n2.id, round(beam.get_angle() % 180, 2))
@@ -50,13 +52,14 @@ class Model:
         self.node_manager.register_connection(n2.id, round((beam.get_angle()+90) % 180, 2))
         return beam
 
-    def add_column(self, revit_id, section, level, p1, p2):
+    def add_column(self, section, level, p1, p2, revit_id=None):
         """Crea una columna como FrameElement."""
 
         n1 = self.node_manager.get_or_create_node(*p1)
         n2 = self.node_manager.get_or_create_node(*p2)
         
-        col = FrameElement(revit_id, section, level, n1, n2)
+        element_id = self.element_manager.assign_id('Frame')
+        col = FrameElement(element_id, section, level, n1, n2, revit_id)
         self.columns.append(col)
         self.node_manager.register_connection(n1.id,0)
         self.node_manager.register_connection(n2.id,0)
@@ -64,13 +67,13 @@ class Model:
         self.node_manager.register_connection(n2.id,90)
         return col
 
-    def add_wall(self, revit_id, exterior_pts, holes_pts, section, level, height):
+    def add_wall(self, exterior_pts, holes_pts, section, level, height, revit_id=None):
         """
         Recibe la data cruda, la procesa a través del WallProcessor 
         y agrega los sub-elementos resultantes al modelo.
         """
         # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
-        temp_wall = WallElement(revit_id, section, level, [])
+        temp_wall = WallElement("TEMP", section, level, [], revit_id)
         temp_wall.exterior_points = exterior_pts
         temp_wall.holes_points = holes_pts
         temp_wall.total_height = height
@@ -96,13 +99,13 @@ class Model:
         
         return new_elements
     
-    def add_slab(self, revit_id, exterior_pts, holes_pts, section, level):
+    def add_slab(self, exterior_pts, holes_pts, section, level, revit_id=None):
         """
         Recibe la data cruda, la procesa a través del WallProcessor 
         y agrega los sub-elementos resultantes al modelo.
         """
         # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
-        temp_slab = SlabElement(revit_id, section, level, [])
+        temp_slab = SlabElement("TEMP", section, level, [], revit_id)
         temp_slab.exterior_points = exterior_pts
         temp_slab.holes_points = holes_pts
 

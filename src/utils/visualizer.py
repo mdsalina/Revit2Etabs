@@ -12,13 +12,13 @@ class StructuralVisualizer:
         self.scatter = None
         self._zoom_factor = 1.0
 
-    def plot_model(self, show_nodes=False, show_grids=False):
+    def plot_model(self, show_nodes=False, show_grids=False, show_ids=False):
         """Genera una vista 3D interactiva de la estructura."""
         self.fig = plt.figure(figsize=(15, 12))
         self.ax = self.fig.add_subplot(111, projection='3d')
         
-        self._plot_frames(self.ax)
-        self._plot_shells(self.ax)
+        self._plot_frames(self.ax, show_ids)
+        self._plot_shells(self.ax, show_ids)
         
         # Nueva funcionalidad para visualizar grillas
         if show_grids:
@@ -82,31 +82,39 @@ class StructuralVisualizer:
         
         self.fig.canvas.draw_idle()
 
-    def _plot_frames(self, ax):
+    def _plot_frames(self, ax, show_ids=False):
         for beam in self.model.beams:
             x = [beam.start_node.x, beam.end_node.x]
             y = [beam.start_node.y, beam.end_node.y]
             z = [beam.start_node.z, beam.end_node.z]
             ax.plot(x, y, z, color='blue', linewidth=2, label='Beam' if 'Beam' not in plt.gca().get_legend_handles_labels()[1] else "")
+            if show_ids and hasattr(beam, 'id'):
+                ax.text(np.mean(x), np.mean(y), np.mean(z), str(beam.id), color='blue', fontsize=8, fontweight='bold')
 
         for col in self.model.columns:
             x = [col.start_node.x, col.end_node.x]
             y = [col.start_node.y, col.end_node.y]
             z = [col.start_node.z, col.end_node.z]
             ax.plot(x, y, z, color='green', linewidth=3)
+            if show_ids and hasattr(col, 'id'):
+                ax.text(np.mean(x), np.mean(y), np.mean(z), str(col.id), color='green', fontsize=8, fontweight='bold')
 
-    def _plot_shells(self, ax):
+    def _plot_shells(self, ax, show_ids=False):
         for wall in self.model.walls:
             # Obtener coordenadas de los nodos del muro
             verts = [ [n.x, n.y, n.z] for n in wall.nodes ]
             poly = Poly3DCollection([verts], alpha=0.3, facecolor='red', edgecolor='darkred')
             ax.add_collection3d(poly)
+            if show_ids and hasattr(wall, 'id') and wall.nodes:
+                ax.text(np.mean([n.x for n in wall.nodes]), np.mean([n.y for n in wall.nodes]), np.mean([n.z for n in wall.nodes]), str(wall.id), color='red', fontsize=8, fontweight='bold')
 
         for slab in self.model.slabs:
             # Obtener coordenadas de los nodos del muro
             verts = [ [n.x, n.y, n.z] for n in slab.nodes ]
             poly = Poly3DCollection([verts], alpha=0.3, facecolor='cyan', edgecolor='darkblue')
             ax.add_collection3d(poly)
+            if show_ids and hasattr(slab, 'id') and slab.nodes:
+                ax.text(np.mean([n.x for n in slab.nodes]), np.mean([n.y for n in slab.nodes]), np.mean([n.z for n in slab.nodes]), str(slab.id), color='darkcyan', fontsize=8, fontweight='bold')
 
     def _plot_nodes(self, ax, plot_id=True):
         nodes = list(self.model.node_manager.nodes.values())
@@ -187,7 +195,7 @@ class StructuralVisualizer:
         ax.set_ylim3d([np.mean(y_limits) - plot_radius, np.mean(y_limits) + plot_radius])
         ax.set_zlim3d([np.mean(z_limits) - plot_radius, np.mean(z_limits) + plot_radius])
     
-    def plot_grid(self, grid_label, show_nodes=False, show_grids=True, show_levels=True, id_walls=None, id_beams=None, id_nodes=None):
+    def plot_grid(self, grid_label, show_nodes=False, show_grids=True, show_levels=True, id_walls=None, id_beams=None, id_nodes=None, show_ids=False):
         """
         Grafica en 2D la elevación de un eje en específico.
         """
@@ -252,6 +260,8 @@ class StructuralVisualizer:
                 lw = 3 if is_col else 2
                 
                 ax.plot([h1, h2], [z1, z2], color=color, linewidth=lw)
+                if show_ids and getattr(elem, 'id', None):
+                    ax.text((h1+h2)/2, (z1+z2)/2, str(elem.id), color=color, fontsize=8, fontweight='bold', ha='center', va='center')
                 
                 all_h.extend([h1, h2])
                 all_z.extend([z1, z2])
@@ -297,6 +307,10 @@ class StructuralVisualizer:
                     polygon_z.append(polygon_z[0])
                     ax.plot(polygon_h, polygon_z, color='darkred', linewidth=1)
                     ax.fill(polygon_h, polygon_z, color='red', alpha=0.3)
+                    if show_ids and getattr(elem, 'id', None):
+                        mid_h = np.mean(polygon_h[:-1])
+                        mid_z = np.mean(polygon_z[:-1])
+                        ax.text(mid_h, mid_z, str(elem.id), color='darkred', fontsize=8, fontweight='bold', ha='center', va='center')
         
         # Graficar nodos adicionales que estén en id_nodes pero no pertenezcan a los elementos ya graficados
         if show_nodes and id_nodes:
@@ -395,7 +409,7 @@ class StructuralVisualizer:
         self.fig.canvas.draw_idle()
         print(f"Nodo {node.id} Seleccionado - X: {node.x:.4f}, Y: {node.y:.4f}, Z: {node.z:.4f}")
 
-    def plot_plan(self, level_id, show_nodes=False, show_grids=True, show_slab=False):
+    def plot_plan(self, level_id, show_nodes=False, show_grids=True, show_slab=False, show_ids=False):
         """
         Grafica en planta los elementos del modelo que tengan nodos calzando con el nivel indicado.
         """
@@ -488,6 +502,9 @@ class StructuralVisualizer:
             t = get_thickness(wall, 0.2)
             plot_thick_line(x1, y1, x2, y2, t, color, alpha=0.5, zorder=2)
             
+            if show_ids and getattr(wall, 'id', None):
+                ax.text((x1+x2)/2, (y1+y2)/2, str(wall.id), color=color, fontsize=8, fontweight='bold', ha='center', va='center')
+            
             if show_nodes:
                 nodes_to_plot[wall.start_node.id] = wall.start_node
                 nodes_to_plot[wall.end_node.id] = wall.end_node
@@ -501,6 +518,9 @@ class StructuralVisualizer:
                 w, _ = get_dimensions(beam, 0.2, 0.2)
                 plot_thick_line(x1, y1, x2, y2, w, 'green', alpha=0.5, zorder=3)
                 
+                if show_ids and getattr(beam, 'id', None):
+                    ax.text((x1+x2)/2, (y1+y2)/2, str(beam.id), color='green', fontsize=8, fontweight='bold', ha='center', va='center')
+
                 if show_nodes:
                     nodes_to_plot[beam.start_node.id] = beam.start_node
                     nodes_to_plot[beam.end_node.id] = beam.end_node
@@ -517,12 +537,17 @@ class StructuralVisualizer:
                 if math.hypot(dx, dy) > 1e-4:
                     # Inclined column
                     plot_thick_line(x, y, col.end_node.x, col.end_node.y, w, 'black', alpha=1.0, zorder=4)
+                    mid_x, mid_y = (x + col.end_node.x)/2, (y + col.end_node.y)/2
                 else:
                     # Vertical column
                     rect = patches.Rectangle((x - w/2, y - h/2), w, h, linewidth=1, edgecolor='black', facecolor='black', alpha=1.0, zorder=4)
                     ax.add_patch(rect)
                     add_points([x - w/2, x + w/2], [y - h/2, y + h/2])
+                    mid_x, mid_y = x, y
                     
+                if show_ids and getattr(col, 'id', None):
+                    ax.text(mid_x, mid_y, str(col.id), color='white' if math.hypot(dx, dy) < 1e-4 else 'black', fontsize=8, fontweight='bold', ha='center', va='center', zorder=5)
+
                 if show_nodes:
                     nodes_to_plot[col.start_node.id] = col.start_node
 
@@ -554,6 +579,8 @@ class StructuralVisualizer:
                         py.append(py[0])
                         ax.fill(px, py, color='cyan', alpha=0.2, edgecolor='darkcyan', zorder=1)
                         add_points(px, py)
+                        if show_ids and getattr(slab, 'id', None):
+                            ax.text(np.mean(px[:-1]), np.mean(py[:-1]), str(slab.id), color='darkcyan', fontsize=8, fontweight='bold', ha='center', va='center')
 
         # Grillas
         if show_grids:

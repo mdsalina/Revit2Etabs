@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
 class StructuralElement(ABC):
-    def __init__(self, revit_id, section, level):
+    def __init__(self, id, section, level, revit_id=None):
+        self.id = id
         self.revit_id = revit_id
         self.section = section
         self.level = level

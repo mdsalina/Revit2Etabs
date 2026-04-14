@@ -34,7 +34,7 @@ LMIN=0.2 # Longitud mínima para elementos estructurales.
 DZ=1 # Desplazamiento vertical del modelo. Permite agregar 1m en piso base.
 DZ_LEVEL=0.35 # Tolerancia de distancia para ajustar la altura de los nodos a los niveles.
 BEAM_GRID=False # Si es True, se genera una grilla para vigas.
-DIVIDE_ONLY_WALLS_BY_INTERSECTION=True # Si es True, se divide los muros por intersección de vigas
+DIVIDE_ONLY_WALLS_BY_INTERSECTION=False # Si es True, se divide los muros por intersección de vigas
 
 def run_pipeline(): 
     # 1. Creamos el modelo (Cerebro)
@@ -49,7 +49,7 @@ def run_pipeline():
     etabs_model = EtabsWriter(modelo)
 
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[11]}.json")
+    loader.load_json(f"data/{test[7]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -75,7 +75,7 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     
 
-    modelo.grid_manager.cleanup_unused_grids(tolerance=0.1,beam_grid=BEAM_GRID)  #Elimino las grillas que no tienen elementos asigandos
+    #modelo.grid_manager.cleanup_unused_grids(tolerance=0.1,beam_grid=BEAM_GRID)  #Elimino las grillas que no tienen elementos asigandos
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
@@ -86,15 +86,15 @@ def run_pipeline():
     optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
     optimizer.divide_walls_by_horizontal_lines()
     
-    #viz.plot_model(show_nodes=False,show_grids=True)  #ploteo modelo completo
-    #viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True) #ploteo grilla específica
-    #viz.plot_plan(level_id="L4", show_nodes=True, show_grids=True, show_slab=False) #ploteo planta específica
+    viz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
+    viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
+    viz.plot_plan(level_id="L1", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
      
     # 3. Escribimos en ETABS
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
-    etabs_model.connect_active_etabs()
-    etabs_model.write_all()
+    #etabs_model.connect_active_etabs()
+    #etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 

@@ -135,3 +135,20 @@ class NodeManager:
             if unified_angles:
                 for n_id in node_ids:
                     self.node_angles[n_id] = set(unified_angles)
+
+class ElementManager:
+    """Administra la asignación de IDs únicos para diferentes tipos de elementos estructurales."""
+    def __init__(self):
+        self.counters = {'Wall': 1, 'Frame': 1, 'Slab': 1}
+        self.prefixes = {'Wall': 'M', 'Frame': 'F', 'Slab': 'S'}
+
+    def assign_id(self, element_type):
+        """Asigna un nuevo ID único a un tipo de elemento (ej. 'M-1')."""
+        prefix = self.prefixes.get(element_type, 'E')
+        num = self.counters.get(element_type, 1)
+        new_id = f"{prefix}-{num}"
+        
+        if element_type in self.counters:
+            self.counters[element_type] += 1
+            
+        return new_id

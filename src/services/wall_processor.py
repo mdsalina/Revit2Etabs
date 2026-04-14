@@ -25,11 +25,13 @@ class WallProcessor(BaseShellProcessor):
         z_coords = [n.z for n in nodes_3d]
         z_max = max(z_coords)
         level_name = self.model.story_manager.get_level_at(z_max)
+        new_id = self.model.element_manager.assign_id('Wall')
         return WallElement(
-            revit_id=parent_wall.revit_id,
+            id=new_id,
             section=parent_wall.section,
             level=level_name,
-            nodes=nodes_3d
+            nodes=nodes_3d,
+            revit_id=parent_wall.revit_id
         )
     
     def _create_spandrel_frame(self, rect_poly, parent_wall, nodes_3d):
@@ -52,10 +54,12 @@ class WallProcessor(BaseShellProcessor):
         node_start = self.model.node_manager.get_or_create_node(*p1_3d)
         node_end = self.model.node_manager.get_or_create_node(*p2_3d)
         
+        new_id = self.model.element_manager.assign_id('Frame')
         return FrameElement(
-            revit_id=parent_wall.revit_id,
+            id=new_id,
             section=f"SPANDREL_{parent_wall.section}", # Sección especial de viga
             level=parent_wall.level,
             node_start=node_start,
-            node_end=node_end
+            node_end=node_end,
+            revit_id=parent_wall.revit_id
         )
