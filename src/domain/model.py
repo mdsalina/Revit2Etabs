@@ -88,14 +88,14 @@ class Model:
                 self.walls.append(elem)
                 for nodo in elem.nodes:
                     self.node_manager.register_connection(nodo.id, round(elem.get_angle() % 180, 2))
-                    self.node_manager.register_connection(nodo.id, round((elem.get_angle()+90) % 180, 2))
+                    #self.node_manager.register_connection(nodo.id, round((elem.get_angle()+90) % 180, 2))
 
             elif isinstance(elem, FrameElement):
                 self.beams.append(elem)
                 self.node_manager.register_connection(elem.n1.id, round(elem.get_angle() % 180, 2))
                 self.node_manager.register_connection(elem.n2.id, round(elem.get_angle() % 180, 2))
-                self.node_manager.register_connection(elem.n1.id, round((elem.get_angle()+90) % 180, 2))
-                self.node_manager.register_connection(elem.n2.id, round((elem.get_angle()+90) % 180, 2))
+                #self.node_manager.register_connection(elem.n1.id, round((elem.get_angle()+90) % 180, 2))
+                #self.node_manager.register_connection(elem.n2.id, round((elem.get_angle()+90) % 180, 2))
         
         return new_elements
     

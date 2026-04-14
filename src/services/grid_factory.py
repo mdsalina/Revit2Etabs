@@ -134,10 +134,9 @@ class GridFactory:
         node_manager = self.model.node_manager
 
         for node in node_manager.nodes.values():
+
             # 1. Obtener ángulos de elementos reales conectados a este nodo
-            connected_angles = node_manager.get_connected_angles(node.id)
-            if len(connected_angles) < 2:
-                continue # No hay intersección posible con un solo ángulo
+            connected_angles = list(node_manager.get_connected_angles(node.id))
 
             # 2. Mapear ángulos de elementos a los ángulos maestros de grillas
             relevant_master_angles = set()
@@ -146,7 +145,7 @@ class GridFactory:
                 best_master = min(self.master_grids.keys(), 
                                   key=lambda m: min(abs(m - c_ang), abs(180 - abs(m - c_ang))))
                 relevant_master_angles.add(best_master)
-
+            
             # 3. Buscar las mejores grillas candidatas SOLO dentro de los ángulos relevantes
             candidate_grids = []
             for ang in relevant_master_angles:
@@ -170,14 +169,27 @@ class GridFactory:
                     node.x, node.y = new_x, new_y
                     nodes_moved += 1
             else:
-                if len(candidate_grids) == 1: # muevo el nodo a la grilla mas cercana
+                if len(candidate_grids) == 1: # muevo el nodo a la intersección perpendicular más cercana siempre que se cumpla con max_distance si no lo muevo a la grilla mas cercana
                     ang, rho_grid = candidate_grids[0]
-                    theta = np.radians((ang + 90) % 180)
-                    rho_node = self._calculate_rho(node.x, node.y, ang)
-                    d_rho = rho_grid - rho_node
-                    node.x += d_rho * np.cos(theta)
-                    node.y += d_rho * np.sin(theta)
-                    nodes_moved += 1
+                    ang_per=round((ang+90)%180,2)
+                    rhos = self.master_grids[ang_per]
+                    rho_node = self._calculate_rho(node.x, node.y, ang_per)
+                    closest_rho = min(rhos, key=lambda r: abs(r - rho_node))
+
+                    if abs(closest_rho - rho_node) <= max_distance:
+                        candidate_grids.append((ang_per, closest_rho))
+                        new_x, new_y = self._intersect_lines(candidate_grids[0], candidate_grids[1])
+                        if new_x is not None:
+                            node.x, node.y = new_x, new_y
+                            nodes_moved += 1
+
+                    else: #si no se cumple con max_distance entonces muevo el nodo a la grilla mas cercana
+                        theta = np.radians((ang + 90) % 180)
+                        rho_node = self._calculate_rho(node.x, node.y, ang)
+                        d_rho = rho_grid - rho_node
+                        node.x += d_rho * np.cos(theta)
+                        node.y += d_rho * np.sin(theta)
+                        nodes_moved += 1
                 else:
                     print(f"No se encontraron grillas relevantes para el nodo {node.id}: x:{round(node.x,3)}, y:{round(node.y,3)} z:{round(node.z,3)}, relevant_master_angles:{relevant_master_angles}, candidate_grids:{candidate_grids}, distancia minima: {round(abs(closest_rho - rho_node),2)}")
                     

@@ -47,13 +47,12 @@ def run_pipeline():
     optimizer = GeometryOptimizer(modelo)
     viz = StructuralVisualizer(modelo)
     etabs_model = EtabsWriter(modelo)
-
     logger.info("Cargando datos...")
     loader.load_json(f"data/{test[7]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
-    
+
     #viz.plot_model(show_nodes=True)
 
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
@@ -73,9 +72,8 @@ def run_pipeline():
     optimizer.merge_duplicate_nodes()  # fusiona nodos duplicados tras snap_nodes + snap_z_to_levels
     optimizer.remove_short_walls(min_height=LMIN)
     optimizer.remove_orphan_nodes()
-    
 
-    #modelo.grid_manager.cleanup_unused_grids(tolerance=0.1,beam_grid=BEAM_GRID)  #Elimino las grillas que no tienen elementos asigandos
+    modelo.grid_manager.cleanup_unused_grids(tolerance=0.1,beam_grid=BEAM_GRID)  #Elimino las grillas que no tienen elementos asigandos
     modelo.grid_manager.rename_grids()  #renombro las grillsa
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
@@ -86,15 +84,16 @@ def run_pipeline():
     optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
     optimizer.divide_walls_by_horizontal_lines()
     
-    viz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
-    viz.plot_grid("AD", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
-    viz.plot_plan(level_id="L1", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
+
+    #viz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
+    #viz.plot_grid("AA", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
+    #viz.plot_plan(level_id="L1", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
      
     # 3. Escribimos en ETABS
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
-    #etabs_model.connect_active_etabs()
-    #etabs_model.write_all()
+    etabs_model.connect_active_etabs()
+    etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 
