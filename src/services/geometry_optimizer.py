@@ -843,10 +843,17 @@ class GeometryOptimizer:
                 todas_z.extend([n.z for n in w.nodes])
                 
             from shapely.ops import unary_union
+            from shapely.geometry import Polygon
             geom_muros = unary_union([p for _, p in wall_polys])
             if not geom_muros.is_valid:
                 from shapely.validation import make_valid
                 geom_muros = make_valid(geom_muros)
+                if hasattr(geom_muros, 'geoms'):
+                    geom_muros = unary_union([g for g in geom_muros.geoms if isinstance(g, Polygon)])
+            try:
+                geom_muros = geom_muros.buffer(0)
+            except Exception:
+                pass
                 
             z_min_eje, z_max_eje = min(todas_z), max(todas_z)
             v_min_eje = np.dot(np.array([0, 0, z_min_eje - origin[2]]), v_axis)
@@ -866,7 +873,13 @@ class GeometryOptimizer:
                 
                 # CREAR MÁSCARA GLOBAL PARA ESTE PUNTO
                 mask_busqueda = box(u_punto - 0.02, v_min_eje, u_punto + 0.02, v_max_eje)
-                region_contacto = mask_busqueda.intersection(geom_muros)
+                try:
+                    region_contacto = mask_busqueda.intersection(geom_muros)
+                except Exception:
+                    try:
+                        region_contacto = mask_busqueda.intersection(geom_muros.buffer(0))
+                    except Exception:
+                        continue
                 if region_contacto.is_empty: continue
                 
                 # OBTENER BANDA CONECTADA DE MANERA DETERMINISTA
