@@ -421,6 +421,20 @@ class StructuralVisualizer:
         fig, ax = plt.subplots(figsize=(12, 12))
         all_x, all_y = [], []
         
+        def on_pick(event):
+            if hasattr(event.artist, 'node_ids'):
+                ind = event.ind[0]
+                if ind < len(event.artist.node_ids):
+                    node_id = event.artist.node_ids[ind]
+                    node = self.model.node_manager.get_node_by_id(node_id)
+                    if node:
+                        print(f"Nodo {node.id} Seleccionado - X: {node.x:.4f}, Y: {node.y:.4f}, Z: {node.z:.4f}")
+                        
+        if show_nodes:
+            fig.canvas.mpl_connect('pick_event', on_pick)
+            nodes_to_plot = {}
+
+        
         def add_points(xs, ys):
             all_x.extend(xs)
             all_y.extend(ys)
@@ -475,9 +489,8 @@ class StructuralVisualizer:
             plot_thick_line(x1, y1, x2, y2, t, color, alpha=0.5, zorder=2)
             
             if show_nodes:
-                ax.scatter([x1, x2], [y1, y2], color='black', s=15, zorder=5)
-                ax.text(x1, y1, str(wall.start_node.id), fontsize=7, color='darkred')
-                ax.text(x2, y2, str(wall.end_node.id), fontsize=7, color='darkred')
+                nodes_to_plot[wall.start_node.id] = wall.start_node
+                nodes_to_plot[wall.end_node.id] = wall.end_node
                 
         # Vigas
         for beam in self.model.beams:
@@ -489,9 +502,8 @@ class StructuralVisualizer:
                 plot_thick_line(x1, y1, x2, y2, w, 'green', alpha=0.5, zorder=3)
                 
                 if show_nodes:
-                    ax.scatter([x1, x2], [y1, y2], color='black', s=15, zorder=5)
-                    ax.text(x1, y1, str(beam.start_node.id), fontsize=7, color='darkred')
-                    ax.text(x2, y2, str(beam.end_node.id), fontsize=7, color='darkred')
+                    nodes_to_plot[beam.start_node.id] = beam.start_node
+                    nodes_to_plot[beam.end_node.id] = beam.end_node
                     
         # Columnas
         for col in self.model.columns:
@@ -512,8 +524,21 @@ class StructuralVisualizer:
                     add_points([x - w/2, x + w/2], [y - h/2, y + h/2])
                     
                 if show_nodes:
-                    ax.scatter([x], [y], color='black', s=15, zorder=5)
-                    ax.text(x, y, str(col.start_node.id), fontsize=7, color='darkred')
+                    nodes_to_plot[col.start_node.id] = col.start_node
+
+        # Dibujar nodos agrupados
+        if show_nodes and nodes_to_plot:
+            n_ids = []
+            nx = []
+            ny = []
+            for nid, node in nodes_to_plot.items():
+                n_ids.append(nid)
+                nx.append(node.x)
+                ny.append(node.y)
+                ax.text(node.x, node.y, str(nid), fontsize=7, color='darkred')
+            
+            sc = ax.scatter(nx, ny, color='black', s=15, zorder=5, picker=True, pickradius=5)
+            sc.node_ids = n_ids
 
         # Losas
         if show_slab:
