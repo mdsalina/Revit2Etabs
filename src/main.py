@@ -5,6 +5,7 @@ from services.revit_loader import RevitLoader
 from services.etabs_writer import EtabsWriter
 from services.geometry_optimizer import GeometryOptimizer
 from utils.visualizer import StructuralVisualizer
+from utils.visualizer_Pyvista import StructuralVisualizerPyVista
 from services.grid_factory import GridFactory
 
 # Inicializamos el logger globalmente al inicio
@@ -46,6 +47,7 @@ def run_pipeline():
     grid_factory = GridFactory(modelo)
     optimizer = GeometryOptimizer(modelo)
     viz = StructuralVisualizer(modelo)
+    pyviz= StructuralVisualizerPyVista(modelo)
     etabs_model = EtabsWriter(modelo)
     logger.info("Cargando datos...")
     loader.load_json(f"data/{test[7]}.json")
@@ -83,17 +85,23 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
     optimizer.divide_walls_by_horizontal_lines()
-    
+
+
+    optimizer.check_walls() # Elimina muros inválidos (no verticales o no coplanares)
+    optimizer.remove_short_elements(LMIN)
+    optimizer.remove_short_walls(min_height=LMIN)
+    optimizer.remove_orphan_nodes()
 
     #viz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
+    pyviz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
     #viz.plot_grid("AA", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
     #viz.plot_plan(level_id="L1", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
      
     # 3. Escribimos en ETABS
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
-    etabs_model.connect_active_etabs()
-    etabs_model.write_all()
+    #etabs_model.connect_active_etabs()
+    #etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 

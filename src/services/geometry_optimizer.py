@@ -976,3 +976,78 @@ class GeometryOptimizer:
         self.model.node_manager.reindex()
         self.model.grid_manager.map_elements_to_grids()
         logger.info(f"GeometryOptimizer: Se completó la división por intersección de {split_count_beams} vigas y {split_count_walls} muros.")
+
+    def check_walls(self):
+        """
+        Verifica si los elementos wall del modelo son válidos.
+        Un elemento wall será válido si todos sus nodos pertenecen a un mismo plano
+        y ese plano tiene normal con componente Z igual a 0, es decir, es un plano vertical.
+        Si un muro no es válido lo elimina del modelo y lo imprime en consola.
+        """
+        valid_walls = []
+        invalid_walls = []
+        import numpy as np
+
+        for wall in self.model.walls:
+            if not hasattr(wall, 'nodes') or len(wall.nodes) < 3:
+                invalid_walls.append(wall)
+                continue
+
+            # Nodos como arreglos numpy
+            p1 = np.array([wall.nodes[0].x, wall.nodes[0].y, wall.nodes[0].z])
+            normal = None
+            is_valid = True
+            
+            # 1. Encontrar la normal del plano (buscar 3 puntos no colineales)
+            for i in range(1, len(wall.nodes)):
+                for j in range(i + 1, len(wall.nodes)):
+                    pi = np.array([wall.nodes[i].x, wall.nodes[i].y, wall.nodes[i].z])
+                    pj = np.array([wall.nodes[j].x, wall.nodes[j].y, wall.nodes[j].z])
+                    v1 = pi - p1
+                    v2 = pj - p1
+                    cross = np.cross(v1, v2)
+                    norm = np.linalg.norm(cross)
+                    if norm > 1e-6:
+                        normal = cross / norm
+                        break
+                if normal is not None:
+                    break
+                    
+            if normal is None:
+                # Todos los nodos son colineales o degenerados
+                invalid_walls.append(wall)
+                continue
+                
+            # 2. Verificar si es un plano vertical (componente Z de la normal es 0)
+            if abs(normal[2]) > 1e-4:
+                invalid_walls.append(wall)
+                continue
+                
+            # 3. Verificar coplanaridad (todos los nodos deben estar en el plano)
+            for n in wall.nodes:
+                p = np.array([n.x, n.y, n.z])
+                dist = abs(np.dot(normal, p - p1))
+                if dist > 1e-3: # Tolerancia de coplanaridad
+                    is_valid = False
+                    break
+                    
+            if is_valid:
+                valid_walls.append(wall)
+            else:
+                invalid_walls.append(wall)
+
+        # 4. Actualizar las listas del modelo
+        self.model.walls = valid_walls
+        
+        # Eliminar las referencias de estos muros en los ejes geométricos
+        if invalid_walls and hasattr(self.model, 'grid_manager') and hasattr(self.model.grid_manager, 'grid_elements_map'):
+            for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+                self.model.grid_manager.grid_elements_map[grid_label] = [e for e in elements if e not in invalid_walls]
+
+        # 5. Imprimir en consola
+        #for w in invalid_walls:
+        #    w_id = getattr(w, 'id', getattr(w, 'revit_id', 'Desconocido'))
+        #    print(f"Muro inválido eliminado (no vertical o no coplanar): ID={w_id}, sus nodos son: {w.nodes}")
+            
+        if invalid_walls:
+            logger.info(f"CheckWalls: Se eliminaron {len(invalid_walls)} muros inválidos.")

@@ -9,12 +9,12 @@ class StructuralVisualizerPyVista:
         self.plotter.set_background('white')
         self.node_cloud = None
 
-    def plot_model(self, show_nodes=False, show_grids=False):
+    def plot_model(self, show_nodes=False, show_grids=False, show_ids=False):
         """Genera una vista 3D interactiva de la estructura usando PyVista."""
         self.plotter.add_text(f'Vista Previa Interactiva: {self.model.name}', font_size=12, color='black')
 
-        self._plot_frames()
-        self._plot_shells()
+        self._plot_frames(show_ids)
+        self._plot_shells(show_ids)
         
         if show_grids:
             self._plot_grids()
@@ -25,21 +25,29 @@ class StructuralVisualizerPyVista:
         # Añadir ejes de coordenadas globales en la esquina
         self.plotter.add_axes(line_width=5, labels_off=False)
         
-        # PyVista maneja el aspect ratio real (1:1:1) por defecto, 
-        # por lo que no es necesario forzar proporciones matemáticamente.
+        # Añadir cubo de orientación de cámara para facilitar la navegación 3D
+        try:
+            self.plotter.add_camera_orientation_widget()
+        except AttributeError:
+            pass # Para versiones antiguas de PyVista donde no exista la función
         
         # Iniciar la visualización
         self.plotter.show()
 
-    def _plot_frames(self):
+    def _plot_frames(self, show_ids):
         """Dibuja elementos frame (vigas y columnas)."""
         # Vigas (Azul)
         if hasattr(self.model, 'beams') and self.model.beams:
             beam_lines = []
+            beam_centers = []
+            beam_ids = []
             for beam in self.model.beams:
                 p1 = [beam.start_node.x, beam.start_node.y, beam.start_node.z]
                 p2 = [beam.end_node.x, beam.end_node.y, beam.end_node.z]
                 beam_lines.append(pv.Line(p1, p2))
+                if show_ids and hasattr(beam, 'id'):
+                    beam_centers.append([(p1[0]+p2[0])/2, (p1[1]+p2[1])/2, (p1[2]+p2[2])/2])
+                    beam_ids.append(str(beam.id))
             
             if beam_lines:
                 # Combinar líneas en una sola malla optimiza drásticamente el renderizado por GPU
@@ -47,39 +55,94 @@ class StructuralVisualizerPyVista:
                 for line in beam_lines[1:]:
                     merged_beams += line
                 self.plotter.add_mesh(merged_beams, color='blue', line_width=4, label='Vigas')
+                if show_ids and beam_centers:
+                    self.plotter.add_point_labels(np.array(beam_centers), beam_ids, text_color='blue', 
+                                                  point_size=0, font_size=10, shape_opacity=0.0, margin=0)
 
         # Columnas (Verde)
         if hasattr(self.model, 'columns') and self.model.columns:
             col_lines = []
+            col_centers = []
+            col_ids = []
             for col in self.model.columns:
                 p1 = [col.start_node.x, col.start_node.y, col.start_node.z]
                 p2 = [col.end_node.x, col.end_node.y, col.end_node.z]
                 col_lines.append(pv.Line(p1, p2))
+                if show_ids and hasattr(col, 'id'):
+                    col_centers.append([(p1[0]+p2[0])/2, (p1[1]+p2[1])/2, (p1[2]+p2[2])/2])
+                    col_ids.append(str(col.id))
                 
             if col_lines:
                 merged_cols = col_lines[0]
                 for line in col_lines[1:]:
                     merged_cols += line
                 self.plotter.add_mesh(merged_cols, color='green', line_width=5, label='Columnas')
+                if show_ids and col_centers:
+                    self.plotter.add_point_labels(np.array(col_centers), col_ids, text_color='green', 
+                                                  point_size=0, font_size=10, shape_opacity=0.0, margin=0)
 
-    def _plot_shells(self):
+    def _plot_shells(self, show_ids):
         """Dibuja elementos shell (muros y losas) usando polígonos."""
         # Muros (Rojo)
         if hasattr(self.model, 'walls') and self.model.walls:
+            wall_polys = []
+            wall_centers = []
+            wall_ids = []
             for wall in self.model.walls:
                 points = [[n.x, n.y, n.z] for n in wall.nodes]
                 # Formato de caras en PyVista: [número_de_puntos, indice0, indice1, ...]
                 face = [len(points)] + list(range(len(points)))
-                poly = pv.PolyData(points, faces=face)
-                self.plotter.add_mesh(poly, color='red', opacity=0.4, show_edges=True, edge_color='darkred')
+                try:
+                    poly = pv.PolyData(points, faces=face)
+                    wall_polys.append(poly)
+                except Exception:
+                    pass
+
+                if show_ids and hasattr(wall, 'id') and wall.nodes:
+                    center_pt = np.mean(points, axis=0)
+                    wall_centers.append(center_pt)
+                    wall_ids.append(str(wall.id))
+                    
+            if wall_polys:
+                # Merge todas las caras de muros en una sola malla para no saturar el renderizador
+                merged_walls = wall_polys[0]
+                for p in wall_polys[1:]:
+                    merged_walls += p
+                self.plotter.add_mesh(merged_walls, color='red', opacity=0.4, show_edges=True, edge_color='darkred', label='Muros')
+                
+            if show_ids and wall_centers:
+                # Añadir todas las etiquetas de pared en una sola llamada
+                self.plotter.add_point_labels(np.array(wall_centers), wall_ids, text_color='darkred', 
+                                              point_size=0, font_size=10, shape_opacity=0.0, margin=0)
 
         # Losas (Cyan)
         if hasattr(self.model, 'slabs') and self.model.slabs:
+            slab_polys = []
+            slab_centers = []
+            slab_ids = []
             for slab in self.model.slabs:
                 points = [[n.x, n.y, n.z] for n in slab.nodes]
                 face = [len(points)] + list(range(len(points)))
-                poly = pv.PolyData(points, faces=face)
-                self.plotter.add_mesh(poly, color='cyan', opacity=0.4, show_edges=True, edge_color='darkblue')
+                try:
+                    poly = pv.PolyData(points, faces=face)
+                    slab_polys.append(poly)
+                except Exception:
+                    pass
+
+                if show_ids and hasattr(slab, 'id') and slab.nodes:
+                    center_pt = np.mean(points, axis=0)
+                    slab_centers.append(center_pt)
+                    slab_ids.append(str(slab.id))
+                    
+            if slab_polys:
+                merged_slabs = slab_polys[0]
+                for p in slab_polys[1:]:
+                    merged_slabs += p
+                self.plotter.add_mesh(merged_slabs, color='cyan', opacity=0.4, show_edges=True, edge_color='darkblue', label='Losas')
+                
+            if show_ids and slab_centers:
+                self.plotter.add_point_labels(np.array(slab_centers), slab_ids, text_color='darkcyan', 
+                                              point_size=0, font_size=10, shape_opacity=0.0, margin=0)
 
     def _plot_nodes(self):
         """Dibuja nodos y activa la selección interactiva (picking)."""
@@ -102,8 +165,15 @@ class StructuralVisualizerPyVista:
 
         # Callback para el evento de selección
         def callback(mesh, idx):
-            node_id = mesh['ID'][idx]
-            coord = mesh.points[idx]
+            # idx puede venir como un arreglo de NumPy o de pyvista de un solo elemento o un float, convertimos a int para evitar IndexError
+            if isinstance(idx, (list, np.ndarray)):
+                if len(idx) == 0: return
+                idx_val = int(idx[0])
+            else:
+                idx_val = int(idx)
+                
+            node_id = mesh['ID'][idx_val]
+            coord = mesh.points[idx_val]
             # La consola imprimirá el nodo seleccionado
             print(f"Nodo {node_id} Seleccionado - X: {coord[0]:.4f}, Y: {coord[1]:.4f}, Z: {coord[2]:.4f}")
             
