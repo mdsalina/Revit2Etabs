@@ -92,7 +92,7 @@ class WallElement(StructuralElement):
         n2 = self.nodes[1]
         n3 = self.nodes[2]
 
-        if n1.x==n2.x and n1.y==n2.y: # Si los dos primeros nodos son iguales en su proyección, tomamos el primer y el tercer nodo
+        if round(n1.x,2)==round(n2.x,2) and round(n1.y,2)==round(n2.y,2): # Si los dos primeros nodos son iguales en su proyección, tomamos el primer y el tercer nodo
             dx = n1.x - n3.x
             dy = n1.y - n3.y
         else:
@@ -105,3 +105,6 @@ class WallElement(StructuralElement):
         dx = self.end_node.x - self.start_node.x
         dy = self.end_node.y - self.start_node.y
         return math.sqrt(dx**2 + dy**2)
+
+    def __str__(self):
+        return f"Muro {self.id}: {self.nodes}"

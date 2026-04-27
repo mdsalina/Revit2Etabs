@@ -48,8 +48,9 @@ class Model:
         self.beams.append(beam)
         self.node_manager.register_connection(n1.id, round(beam.get_angle() % 180, 2))
         self.node_manager.register_connection(n2.id, round(beam.get_angle() % 180, 2))
-        self.node_manager.register_connection(n1.id, round((beam.get_angle()+90) % 180, 2))
-        self.node_manager.register_connection(n2.id, round((beam.get_angle()+90) % 180, 2))
+
+        #self.node_manager.register_connection(n1.id, round((beam.get_angle()+90) % 180, 2))
+        #self.node_manager.register_connection(n2.id, round((beam.get_angle()+90) % 180, 2))
         return beam
 
     def add_column(self, section, level, p1, p2, revit_id=None):

@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import logging
+import math
 from services.load_filter import LoadFilter
 
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
@@ -55,6 +56,11 @@ class RevitLoader:
             self._parse_project_info(data.get('project_info', {}))
             self._parse_stories(data.get('levels', []))
             self._parse_materials(data.get('materials', []))
+
+            # 1.5 Cargar Grillas
+            grids_data = data.get('grids', [])
+            if grids_data:
+                self._parse_grids(grids_data)
 
             # 2. Obtenemos y aplicamos el DZ a los niveles
             self.dz = self.model.story_manager.get_auto_dz()
@@ -155,6 +161,105 @@ class RevitLoader:
                 params[param] = self._apply_unit_dim(params[param]) #ojo actualmante_apply_unit solo esta soportando unidades de longitud 
 
             self.model.add_material(type_mat,name,params)
+
+    def _parse_grids(self, grids_data):
+        parsed_grids = []
+        for g in grids_data:
+            name = g.get('name', 'S/N')
+            p1 = g.get('p1')
+            p2 = g.get('p2')
+            if not p1 or not p2:
+                continue
+            
+            # Aplicamos factor a las coordenadas (p1 y p2 vienen como [x, y])
+            p1_x = p1[0] * self.factor
+            p1_y = p1[1] * self.factor
+            p2_x = p2[0] * self.factor
+            p2_y = p2[1] * self.factor
+            
+            dx = p2_x - p1_x
+            dy = p2_y - p1_y
+            
+            angle_rad = math.atan2(dy, dx)
+            angle_deg = math.degrees(angle_rad) % 180
+            
+            theta_rad = math.radians((angle_deg + 90) % 180)
+            rho = p1_x * math.cos(theta_rad) + p1_y * math.sin(theta_rad)
+            
+            parsed_grids.append({
+                'name': name,
+                'angle_deg': angle_deg,
+                'rho': rho
+            })
+            
+        # Agrupar ángulos ortogonales con una tolerancia
+        tolerance = 1.0
+        unique_angles = []
+        
+        for pg in parsed_grids:
+            ang = pg['angle_deg']
+            found = False
+            for u_ang in unique_angles:
+                diff = abs(ang - u_ang)
+                if diff <= tolerance or (180 - diff) <= tolerance:
+                    pg['group_angle'] = u_ang
+                    pg['angle_deg'] = u_ang # Normalizar al grupo para evitar errores de precisión
+                    found = True
+                    break
+            if not found:
+                unique_angles.append(ang)
+                pg['group_angle'] = ang
+                pg['angle_deg'] = ang
+                
+        unique_angles.sort()
+        
+        systems_info = []
+        used_angles = set()
+        system_counter = 1
+        
+        for a in unique_angles:
+            if a in used_angles:
+                continue
+                
+            ortho_a = (a + 90) % 180
+            pair = None
+            for b in unique_angles:
+                if b not in used_angles:
+                    diff = abs(b - ortho_a)
+                    if diff <= tolerance or (180 - diff) <= tolerance:
+                        pair = b
+                        break
+            
+            angles_in_sys = [a]
+            used_angles.add(a)
+            if pair is not None:
+                angles_in_sys.append(pair)
+                used_angles.add(pair)
+                
+            systems_info.append({
+                'name': f"G{system_counter}",
+                'angle': round(a, 2),
+                'angles': angles_in_sys
+            })
+            system_counter += 1
+            
+        for sys_info in systems_info:
+            system = self.model.grid_manager.add_system(
+                name=sys_info['name'],
+                prefix="",
+                dx=0,
+                dy=0,
+                angle=sys_info['angle']
+            )
+            
+            if not system:
+                continue
+                
+            for pg in parsed_grids:
+                if pg['group_angle'] in sys_info['angles']:
+                    system.add_grid(pg['name'], pg['angle_deg'], round(pg['rho'], 4))
+                    
+        logger.info(f"Se han parseado {len(parsed_grids)} grillas agrupadas en {len(systems_info)} sistemas.")
 
     def _parse_sections(self, sections_data):
         for sec in sections_data:

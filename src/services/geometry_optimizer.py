@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+from utils.visualizer import StructuralVisualizer
 
 logger = logging.getLogger("Revit2Etabs.Service.GeometryOptimizer")
 
@@ -8,6 +9,7 @@ class GeometryOptimizer:
 
     def __init__(self, model):
         self.model = model
+        self.visualizer = StructuralVisualizer(model)
 
     def remove_short_elements(self, min_length=0.20):
         """
@@ -215,10 +217,20 @@ class GeometryOptimizer:
             return max(z_coords) - min(z_coords)
 
         # Filtramos la lista de muros del modelo
-        self.model.walls = [
-            w for w in self.model.walls 
-            if get_height(w) >= min_height
-        ]
+        valid_walls = []
+        invalid_walls = set()
+        for w in self.model.walls:
+            if get_height(w) >= min_height:
+                valid_walls.append(w)
+            else:
+                invalid_walls.add(w)
+                
+        self.model.walls = valid_walls
+        
+        # Eliminar referencias en las grillas
+        if invalid_walls and hasattr(self.model, 'grid_manager') and hasattr(self.model.grid_manager, 'grid_elements_map'):
+            for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
+                self.model.grid_manager.grid_elements_map[grid_label] = [e for e in elements if e not in invalid_walls]
         
         removed = initial_count - len(self.model.walls)
         if removed > 0:
@@ -734,7 +746,7 @@ class GeometryOptimizer:
 
             if not nodos_propios_eje:
                 continue
-                
+            
             # Límites a lo largo de la directriz para descartar nodos fuera del eje
             u_coords_propios = [np.dot(np.array([n.x - n1.x, n.y - n1.y]), v_dir) for n in nodos_propios_eje]
             min_u_eje = min(u_coords_propios) - 0.15
@@ -760,6 +772,7 @@ class GeometryOptimizer:
 
             # Nodos que vienen de elementos en otros ejes (ignorando los propios con tolerancia estricta)
             nodos_interseccion = set()
+
             for n_tot in nodos_totales_en_eje:
                 es_propio = False
                 for n_prop in nodos_propios_eje:
@@ -774,6 +787,12 @@ class GeometryOptimizer:
             muros_eje = [e for e in elements if isinstance(e, WallElement)]
             nodos_interseccion_lista = list(nodos_interseccion)
             nodos_interseccion_lista.sort(key=lambda n: (round(n.z, 3), round(n.x, 3), round(n.y, 3)))
+
+            ### grafica de un eje especifico para debug ###
+            #if grid_label == "A5":
+            #    id_nodes_plot = [n.id for n in nodos_totales_en_eje]#nodos_interseccion_lista]
+            #    self.visualizer.plot_grid(grid_label, show_nodes=True, id_nodes=id_nodes_plot)
+            ### fin de grafica de un eje especifico para debug ###
 
             vigas_a_remover = set()
             vigas_a_agregar = []
@@ -834,7 +853,15 @@ class GeometryOptimizer:
             muros_a_remover = set()
             muros_a_agregar = []
             
-            wp._project_to_2d(muros_eje[0])
+            # Buscar un muro válido (con altura real) para definir la proyección vertical
+            muro_ref = muros_eje[0]
+            for w in muros_eje:
+                z_coords = [n.z for n in w.nodes]
+                if z_coords and max(z_coords) - min(z_coords) >= 0.1:
+                    muro_ref = w
+                    break
+
+            wp._project_to_2d(muro_ref)
             origin, u_axis, v_axis = wp._current_transform
             
             # PREPARAR GEOMETRÍA GLOBAL (PARA MÁSCARAS)

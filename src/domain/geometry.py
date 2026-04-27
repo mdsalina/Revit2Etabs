@@ -118,13 +118,15 @@ class NodeManager:
         # 1. Agrupar IDs de nodos por su coordenada (X, Y)
         vertical_groups = {} # Llave: (x_round, y_round), Valor: lista de node_ids
         prec = len(str(self.tolerance).split('.')[-1])
-        
+        xy_key_test=[(133.795, 101.142), (133.795, 101.142)]
         for node in self.nodes.values():
             xy_key = (round(node.x, prec), round(node.y, prec))
             if xy_key not in vertical_groups:
                 vertical_groups[xy_key] = []
             vertical_groups[xy_key].append(node.id)
             
+
+
         # 2 y 3. Unir los ángulos de cada grupo y reasignarlos a todos sus nodos
         for xy_key, node_ids in vertical_groups.items():
             unified_angles = set()

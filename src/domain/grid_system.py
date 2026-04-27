@@ -221,11 +221,13 @@ class GridManager:
                     orientacion = "X (Cartesian)"         
 
                 if prefix == 0:
-                    grid.label = grid.label[1:]
+                    if system.prefix and grid.label.startswith(system.prefix):
+                        grid.label = grid.label[len(system.prefix):]
                     grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])
                 elif prefix == 1:
                     if system.name == "G1":
-                        grid.label = grid.label[1:]
+                        if system.prefix and grid.label.startswith(system.prefix):
+                            grid.label = grid.label[len(system.prefix):]
                         grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])
                     else:
                         grid_data.extend([str(system.name),str(orientacion),str(grid.label),str(grid.rho),'', '','','','','Start', 'Yes'])

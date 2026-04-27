@@ -23,8 +23,11 @@ logger = setup_logger()
 #9. las lilas
 #10. hualtatas
 #11. juan pineda
+#12. VM desde calculo más grillas
+#13. Juan_pineda_grids
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas','juan_pineda']
+
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas','juan_pineda','VM_est_grid','Juan_pineda_grids']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
@@ -34,8 +37,10 @@ MAX_DISTANCE=0.3 # Tolerancia de distancia para agrupar nodos similares.
 LMIN=0.2 # Longitud mínima para elementos estructurales.
 DZ=1 # Desplazamiento vertical del modelo. Permite agregar 1m en piso base.
 DZ_LEVEL=0.35 # Tolerancia de distancia para ajustar la altura de los nodos a los niveles.
-BEAM_GRID=False # Si es True, se genera una grilla para vigas.
+BEAM_GRID=True # Si es True, se genera una grilla para vigas.
 DIVIDE_ONLY_WALLS_BY_INTERSECTION=False # Si es True, se divide los muros por intersección de vigas
+KEEPG=True # Si es True, se conserva la grilla existente.
+GRID_TOLERANCE=0.5 # Tolerancia de distancia para ajustar una nueva grilla a una existente.
 
 def run_pipeline(): 
     # 1. Creamos el modelo (Cerebro)
@@ -50,7 +55,7 @@ def run_pipeline():
     pyviz= StructuralVisualizerPyVista(modelo)
     etabs_model = EtabsWriter(modelo)
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[7]}.json")
+    loader.load_json(f"data/{test[12]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -66,7 +71,7 @@ def run_pipeline():
     optimizer.remove_orphan_nodes()
     
     logger.info("Iniciando generación de grillas...")
-    grid_factory.generate_grids(eps_deg=EPS_ANGLE,eps_dist=EPS_DIST,round_decimal=ROUND_DECIMAL,canonical_angles=CANONICAL_ANGLES,snap_threshold=SNAP_THRESHOLD)
+    grid_factory.generate_grids(eps_deg=EPS_ANGLE,eps_dist=EPS_DIST,round_decimal=ROUND_DECIMAL,canonical_angles=CANONICAL_ANGLES,snap_threshold=SNAP_THRESHOLD,keep_grids=KEEPG,grid_tolerance=GRID_TOLERANCE)
     grid_factory.snap_nodes(max_distance=MAX_DISTANCE)
     optimizer.remove_short_elements(LMIN) #hago una nueva depuración geométrica luego del desplazamiento y ajuste a la grilla
     optimizer.remove_elements_below_base(tolerance=0.01)
@@ -75,33 +80,34 @@ def run_pipeline():
     optimizer.remove_short_walls(min_height=LMIN)
     optimizer.remove_orphan_nodes()
 
+
     modelo.grid_manager.cleanup_unused_grids(tolerance=0.1,beam_grid=BEAM_GRID)  #Elimino las grillas que no tienen elementos asigandos
-    modelo.grid_manager.rename_grids()  #renombro las grillsa
+    if not KEEPG: modelo.grid_manager.rename_grids()  #renombro las grillas
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
     optimizer.divide_walls_by_vertical_lines() # optimizo los muros fusionando y dividiendo por niveles
+    optimizer.remove_short_walls(min_height=LMIN*0.1) #elimino muros cortos proque divide_walls_by_vertical_lines pudo generar algunos
     optimizer.split_by_intersection(only_walls=DIVIDE_ONLY_WALLS_BY_INTERSECTION) # propaga fisicamente los cortes verticales
     optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)
     optimizer.remove_orphan_nodes()
     optimizer.convert_large_walls_to_beams(alpha=0.85) #convierte muros en vigas si la altura del muro es menor a 0.85 veces la altura del entrepiso
     optimizer.divide_walls_by_horizontal_lines()
 
-
     optimizer.check_walls() # Elimina muros inválidos (no verticales o no coplanares)
-    optimizer.remove_short_elements(LMIN)
-    optimizer.remove_short_walls(min_height=LMIN)
+    optimizer.remove_short_elements(LMIN*0.1)
+    optimizer.remove_short_walls(min_height=LMIN*0.1)
     optimizer.remove_orphan_nodes()
 
     #viz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
-    pyviz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
-    #viz.plot_grid("AA", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
-    #viz.plot_plan(level_id="L1", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
+    #pyviz.plot_model_pro(show_nodes=False,show_grids=True,show_ids=False)  #ploteo modelo completo
+    #viz.plot_grid("A5", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
+    #viz.plot_plan(level_id="L6", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
      
     # 3. Escribimos en ETABS
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
     logger.info("Iniciando modelación en ETABS...")
-    #etabs_model.connect_active_etabs()
-    #etabs_model.write_all()
+    etabs_model.connect_active_etabs()
+    etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 

@@ -68,7 +68,7 @@ class GridFactory:
         logger.info(f"Ángulos maestros detectados: {self.master_angles}")
         return self.master_angles
 
-    def generate_grids(self, eps_deg=2.0,eps_dist=0.1,round_decimal=2,canonical_angles=None,snap_threshold=2.5):
+    def generate_grids(self, eps_deg=2.0,eps_dist=0.1,round_decimal=2,canonical_angles=None,snap_threshold=2.5, keep_grids=True, grid_tolerance=0.1):
         """Genera el andamiaje de grillas usando los ángulos maestros.
         
         eps_deg: Tolerancia angular para agrupar elementos similares.
@@ -113,7 +113,7 @@ class GridFactory:
             self.master_grids[ang] = sorted([round(x,round_decimal) for x in self._cluster_rhos(rho_list, eps_dist)])
         
         # 3. Organizar y guardar las grillas
-        self.organize_and_save_grids(round_decimal=round_decimal)
+        self.organize_and_save_grids(eps_angle=eps_deg*0.1, round_decimal=round_decimal, keep_grids=keep_grids, grid_tolerance=grid_tolerance)
 
     def _calculate_rho(self, x, y, angle_deg):
         # La normal está a +90 grados de la línea
@@ -222,18 +222,41 @@ class GridFactory:
             # Las líneas son paralelas (determinante cero)
             return None, None
 
-    def organize_and_save_grids(self, eps_angle=1.0,round_decimal=2):
+    def organize_and_save_grids(self, eps_angle=1.0, round_decimal=2, keep_grids=True, grid_tolerance=0.1):
         """
         Toma las grillas maestras generadas, busca pares ortogonales,
         asigna nombres (A, B, 1, 2, Z1...) y las guarda en el modelo.
         eps_angle: Tolerancia angular para considerar dos ángulos como iguales.
+        keep_grids: Si es True, no borra los sistemas existentes e intenta actualizar grillas cercanas.
+        grid_tolerance: Tolerancia de distancia para ajustar una grilla existente.
         """
-        # Limpiamos sistemas previos en el manager del modelo
-        self.model.grid_manager.systems = []
+        if not keep_grids:
+            # Limpiamos sistemas previos en el manager del modelo
+            self.model.grid_manager.systems = []
         
         angles = sorted(self.master_grids.keys())
         used_angles = set()
-        system_count = 0
+        processed_systems = set()
+        system_count = len(self.model.grid_manager.systems) if keep_grids else 0
+
+        def find_existing_system(a):
+            for sys in self.model.grid_manager.systems:
+                diff1 = min(abs(sys.angle - a), 180 - abs(sys.angle - a))
+                diff2 = min(abs((sys.angle + 90) % 180 - a), 180 - abs((sys.angle + 90) % 180 - a))
+                if diff1 < eps_angle or diff2 < eps_angle:
+                    return sys
+            return None
+
+        def get_next_system_name():
+            nums = []
+            for sys in self.model.grid_manager.systems:
+                if sys.name.startswith("G"):
+                    try:
+                        nums.append(int(sys.name[1:]))
+                    except:
+                        pass
+            next_num = max(nums) + 1 if nums else 1
+            return f"G{next_num}"
 
         # Iteramos sobre los ángulos encontrados por DBSCAN
         for ang in angles:
@@ -244,48 +267,134 @@ class GridFactory:
             target_perp = (ang + 90) % 180
             perp_ang = next((a for a in angles if min(abs(a - target_perp), 180 - abs(a - target_perp)) < eps_angle), None)
 
-            # 2. Crear el Sistema de Grillas (G1, G2...)
-            system_name = f"G{system_count + 1}"
-            prefix = string.ascii_uppercase[system_count] if system_count < 26 else f"S{system_count}"
+            # 2. Encontrar o crear sistema
+            system = None
+            if keep_grids:
+                system = find_existing_system(ang)
+                if not system and perp_ang is not None:
+                    system = find_existing_system(perp_ang)
 
-            theta=theta = np.radians((ang + 90))
-            dx=0 #round(self.master_grids[ang][0]* np.cos(theta),round_decimal)
-            dy=0 #round(self.master_grids[ang][0]* np.sin(theta),round_decimal)
-            angle=ang
-            new_system = self.model.grid_manager.add_system(name=system_name, prefix=prefix,dx=dx,dy=dy,angle=angle)
-            
+            is_new_system = False
+            if not system:
+                if keep_grids:
+                    system_name = get_next_system_name()
+                else:
+                    system_name = f"G{system_count + 1}"
+                    
+                prefix = string.ascii_uppercase[system_count] if system_count < 26 else f"S{system_count}"
+                
+                theta = np.radians((ang + 90))
+                dx = 0
+                dy = 0
+                system = self.model.grid_manager.add_system(name=system_name, prefix=prefix, dx=dx, dy=dy, angle=ang)
+                system_count += 1
+                is_new_system = True
+                
+            if system:
+                processed_systems.add(system)
+                
             # 3. Procesar Eje de Letras (Normalmente el ángulo menor o 0°)
-            # Las letras parten de A y avanzan con la coordenada Y (rho ascendente)
-            self._process_axis(new_system, ang, self.master_grids[ang], is_letter=True)
+            self._process_axis(system, ang, self.master_grids[ang], is_letter=True, keep_grids=keep_grids, is_new_system=is_new_system, grid_tolerance=grid_tolerance, eps_angle=eps_angle)
             used_angles.add(ang)
 
             # 4. Procesar Eje de Números (El perpendicular, normalmente 90°)
-            # Los números parten de 1 y avanzan con la coordenada X
             if perp_ang is not None:
-                self._process_axis(new_system, perp_ang, self.master_grids[perp_ang], is_letter=False)
+                self._process_axis(system, perp_ang, self.master_grids[perp_ang], is_letter=False, keep_grids=keep_grids, is_new_system=is_new_system, grid_tolerance=grid_tolerance, eps_angle=eps_angle)
                 used_angles.add(perp_ang)
 
-            system_count += 1
+        if keep_grids:
+            # Eliminar sistemas que no fueron tocados y grillas de ángulos no tocados
+            active_systems = []
+            for sys in self.model.grid_manager.systems:
+                if sys in processed_systems:
+                    # Retener solo las grillas cuyos ángulos fueron procesados (las no asociadas ya se eliminaron en _process_axis)
+                    sys.grids = [g for g in sys.grids if any(min(abs(g.angle_deg - a), 180 - abs(g.angle_deg - a)) < eps_angle for a in used_angles)]
+                    if sys.grids: # Solo mantener sistemas que no quedaron vacíos
+                        active_systems.append(sys)
+            self.model.grid_manager.systems = active_systems
 
-        logger.info(f"GridFactory: Se han organizado {system_count} sistemas de grillas.")
+        logger.info(f"GridFactory: Se han organizado {len(self.model.grid_manager.systems)} sistemas de grillas (keep_grids={keep_grids}).")
 
-    def _process_axis(self, system, angle, rhos, is_letter):
+    def _process_axis(self, system, angle, rhos, is_letter, keep_grids=False, is_new_system=True, grid_tolerance=0.1, eps_angle=1.0):
         """Ordena los rhos y genera las líneas de grilla con sus etiquetas."""
         
-        # Lógica de ordenamiento según tu requerimiento:
-        # - Para 0° (Horizontal): rho = y. Ordenar rho ASC para que A sea el Y menor.
-        # - Para 90° (Vertical): rho = -x. Ordenar rho DESC para que 1 sea el X menor.
         is_vertical = abs(angle - 90) < 1.0
-        sorted_rhos = sorted(rhos)#, reverse=is_vertical)
+        sorted_rhos = sorted(rhos)
 
-        for idx, rho in enumerate(sorted_rhos):
-            # Generar etiqueta (1, 2... o A, B... Z1, Z2)
-            label_val = self._generate_label(idx, is_letter)
-            full_label = f"{system.prefix}-{label_val}"
+        existing_grids = []
+        original_rhos = {}
+        if keep_grids and not is_new_system:
+            for g in system.grids:
+                if min(abs(g.angle_deg - angle), 180 - abs(g.angle_deg - angle)) < eps_angle:
+                    existing_grids.append(g)
+                    original_rhos[g] = g.rho
+
+        available_grids = existing_grids.copy()
+        
+        # 1. Emparejamiento por distancia mínima global
+        matched_pairs = {} # {rho_calculado: grilla_existente}
+        if keep_grids and not is_new_system and existing_grids:
+            distances = []
+            for rho in sorted_rhos:
+                for g in existing_grids:
+                    dist = abs(original_rhos[g] - rho)
+                    if dist <= grid_tolerance:
+                        distances.append((dist, rho, g))
             
-            # Evitar duplicados exactos en el mismo sistema
-            if not any(abs(g.rho - rho) < 1e-4 and abs(g.angle_deg - angle) < 0.1 for g in system.grids):
-                new_line = system.add_grid(label=full_label, angle_deg=angle, rho=rho)
+            # Ordenar por distancia de menor a mayor
+            distances.sort(key=lambda x: x[0])
+            
+            # Asignar priorizando las distancias más cortas
+            for dist, rho, g in distances:
+                if rho not in matched_pairs and g in available_grids:
+                    matched_pairs[rho] = g
+                    available_grids.remove(g)
+
+        # 2. Procesar rhos calculados
+        for idx, rho in enumerate(sorted_rhos):
+            if rho in matched_pairs:
+                # Actualizar grilla emparejada
+                matched_grid = matched_pairs[rho]
+                matched_grid.rho = rho
+                matched_grid.angle_deg = angle
+            elif keep_grids and not is_new_system and existing_grids:
+                # No se emparejó (fuera de tolerancia o grillas agotadas), generar sufijo
+                closest_grid = min(existing_grids, key=lambda g: abs(original_rhos[g] - rho))
+                base_name = closest_grid.label
+                suffix_idx = 0
+                suffixes = string.ascii_lowercase
+                new_label = f"{base_name}_{suffixes[suffix_idx]}"
+                
+                while any(g.label == new_label for g in system.grids):
+                    suffix_idx += 1
+                    if suffix_idx < len(suffixes):
+                        new_label = f"{base_name}_{suffixes[suffix_idx]}"
+                    else:
+                        new_label = f"{base_name}_{suffix_idx}"
+                        
+                system.add_grid(label=new_label, angle_deg=angle, rho=rho)
+            else:
+                label_val = self._generate_label(idx, is_letter)
+                full_label = f"{system.prefix}-{label_val}" if system.prefix else label_val
+                
+                original_full_label = full_label
+                suffix_idx = -1
+                while any(g.label == full_label for g in system.grids):
+                    suffix_idx += 1
+                    if suffix_idx < 26:
+                        full_label = f"{original_full_label}_{string.ascii_lowercase[suffix_idx]}"
+                    else:
+                        full_label = f"{original_full_label}_{suffix_idx}"
+                
+                
+                if not any(abs(g.rho - rho) < 1e-4 and min(abs(g.angle_deg - angle), 180 - abs(g.angle_deg - angle)) < eps_angle for g in system.grids):
+                    system.add_grid(label=full_label, angle_deg=angle, rho=rho)
+
+        # Eliminar las grillas preexistentes de este ángulo que no se asociaron
+        if keep_grids and not is_new_system:
+            for g in available_grids:
+                if g in system.grids:
+                    system.grids.remove(g)
 
     def _generate_label(self, index, is_letter):
         """Genera '1, 2, 3...' o 'A, B... Z, Z1, Z2...'"""
