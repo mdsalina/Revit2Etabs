@@ -113,7 +113,7 @@ class GridFactory:
             self.master_grids[ang] = sorted([round(x,round_decimal) for x in self._cluster_rhos(rho_list, eps_dist)])
         
         # 3. Organizar y guardar las grillas
-        self.organize_and_save_grids(eps_angle=eps_deg*0.1, round_decimal=round_decimal, keep_grids=keep_grids, grid_tolerance=grid_tolerance)
+        self.organize_and_save_grids(eps_angle=eps_deg*0.1, round_decimal=round_decimal, keep_grids=keep_grids, grid_tolerance=grid_tolerance, canonical_angles=canonical_angles)
 
     def _calculate_rho(self, x, y, angle_deg):
         # La normal está a +90 grados de la línea
@@ -222,7 +222,7 @@ class GridFactory:
             # Las líneas son paralelas (determinante cero)
             return None, None
 
-    def organize_and_save_grids(self, eps_angle=1.0, round_decimal=2, keep_grids=True, grid_tolerance=0.1):
+    def organize_and_save_grids(self, eps_angle=1.0, round_decimal=2, keep_grids=True, grid_tolerance=0.1, canonical_angles=None):
         """
         Toma las grillas maestras generadas, busca pares ortogonales,
         asigna nombres (A, B, 1, 2, Z1...) y las guarda en el modelo.
@@ -230,6 +230,23 @@ class GridFactory:
         keep_grids: Si es True, no borra los sistemas existentes e intenta actualizar grillas cercanas.
         grid_tolerance: Tolerancia de distancia para ajustar una grilla existente.
         """
+        if keep_grids and canonical_angles:
+            for sys in self.model.grid_manager.systems:
+                for can_ang in canonical_angles:
+                    diff = min(abs(sys.angle - can_ang), 180 - abs(sys.angle - can_ang))
+                    if diff <= 5.0:
+                        sys.angle = float(can_ang)
+                        perp_can_ang = (can_ang + 90) % 180
+                        for grid in sys.grids:
+                            diff_grid = min(abs(grid.angle_deg - can_ang), 180 - abs(grid.angle_deg - can_ang))
+                            if diff_grid <= 5.0:
+                                grid.angle_deg = float(can_ang)
+                            else:
+                                diff_perp = min(abs(grid.angle_deg - perp_can_ang), 180 - abs(grid.angle_deg - perp_can_ang))
+                                if diff_perp <= 5.0:
+                                    grid.angle_deg = float(perp_can_ang)
+                        break
+
         if not keep_grids:
             # Limpiamos sistemas previos en el manager del modelo
             self.model.grid_manager.systems = []

@@ -188,8 +188,8 @@ class RevitLoader:
             
             parsed_grids.append({
                 'name': name,
-                'angle_deg': angle_deg,
-                'rho': rho
+                'angle_deg': round(angle_deg,0),
+                'rho': round(rho,2)
             })
             
         # Agrupar ángulos ortogonales con una tolerancia

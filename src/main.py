@@ -55,7 +55,7 @@ def run_pipeline():
     pyviz= StructuralVisualizerPyVista(modelo)
     etabs_model = EtabsWriter(modelo)
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[12]}.json")
+    loader.load_json(f"data/{test[13]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
