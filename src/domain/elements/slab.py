@@ -2,15 +2,15 @@ from .base import StructuralElement
 import math
 
 class SlabElement(StructuralElement):
-    def __init__(self, id, section, level, nodes, revit_id=None):
+    def __init__(self, id, section, level, nodes, holes=[], revit_id=None):
         super().__init__(id, section, level, revit_id)
         self.nodes = nodes # Lista de objetos clase Node
+        self.holes = holes # Lista de listas de listas con coordenadas de los orificios
 
     def get_angle(self):
         # losa no tiene angulo por lo que arrojo un error
         raise ValueError("SlabElement no tiene angulo")
         
-
     def get_geometry_summary(self):
         return f"Slab con {len(self.nodes)}"
 

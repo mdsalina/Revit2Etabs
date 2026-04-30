@@ -55,7 +55,7 @@ def run_pipeline():
     pyviz= StructuralVisualizerPyVista(modelo)
     etabs_model = EtabsWriter(modelo)
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[13]}.json")
+    loader.load_json(f"data/{test[12]}.json")
     
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
@@ -65,6 +65,7 @@ def run_pipeline():
     logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
 
     logger.info("Iniciando depuración geométrica...")
+    #optimizer.divide_slabs_by_geometry()
     optimizer.remove_short_elements(LMIN)
     optimizer.transform_model(dx="Auto",dy="Auto",dz=DZ,alpha_deg=0,filter_stories=[modelo.story_manager.get_base_story().name]) #aplico dz excepto para el piso base
     optimizer.remove_short_walls(min_height=LMIN)
@@ -85,7 +86,9 @@ def run_pipeline():
     if not KEEPG: modelo.grid_manager.rename_grids()  #renombro las grillas
     modelo.grid_manager.map_elements_to_grids(tolerance=0.05) #mapeo FINAL los elementos a las grillas
 
+    
     optimizer.divide_walls_by_vertical_lines() # optimizo los muros fusionando y dividiendo por niveles
+    
     optimizer.remove_short_walls(min_height=LMIN*0.1) #elimino muros cortos proque divide_walls_by_vertical_lines pudo generar algunos
     optimizer.split_by_intersection(only_walls=DIVIDE_ONLY_WALLS_BY_INTERSECTION) # propaga fisicamente los cortes verticales
     optimizer.convert_short_beams_to_walls(max_ratio=4.0, z_dir=1)

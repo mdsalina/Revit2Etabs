@@ -195,7 +195,7 @@ class StructuralVisualizer:
         ax.set_ylim3d([np.mean(y_limits) - plot_radius, np.mean(y_limits) + plot_radius])
         ax.set_zlim3d([np.mean(z_limits) - plot_radius, np.mean(z_limits) + plot_radius])
     
-    def plot_grid(self, grid_label, show_nodes=False, show_grids=True, show_levels=True, id_walls=None, id_beams=None, id_nodes=None, show_ids=False):
+    def plot_grid(self, grid_label, show_nodes=False, show_grids=True, show_levels=True, show_intersecting_nodes=False, id_walls=None, id_beams=None, id_nodes=None, show_ids=False):
         """
         Grafica en 2D la elevación de un eje en específico.
         """
@@ -246,7 +246,7 @@ class StructuralVisualizer:
         # Graficar elementos
         plotted_nodes = set()
         for elem in elements:
-            elem_id = getattr(elem, 'revit_id', getattr(elem, 'id', None))
+            elem_id = getattr(elem, 'id', getattr(elem, 'revit_id', None))
             
             if elem in self.model.beams or elem in self.model.columns:
                 if id_beams and elem_id not in id_beams:
@@ -323,6 +323,24 @@ class StructuralVisualizer:
                         ax.text(h, z, f" {node.id}", fontsize=8, color='blue', fontweight='bold', va='bottom')
                         all_h.append(h)
                         all_z.append(z)
+                        plotted_nodes.add(node.id)
+
+        # Graficar nodos de otros ejes que intersectan geométricamente con el actual
+        if show_intersecting_nodes:
+            theta_rad = np.radians((target_grid.angle_deg + 90) % 180)
+            cos_t = np.cos(theta_rad)
+            sin_t = np.sin(theta_rad)
+            for node in self.model.node_manager.nodes.values():
+                if node.id not in plotted_nodes:
+                    node_rho = node.x * cos_t + node.y * sin_t
+                    if abs(node_rho - target_grid.rho) < 0.05:
+                        h, z = project_node(node)
+                        ax.scatter([h], [z], color='blue', s=30, zorder=6)
+                        if show_ids:
+                            ax.text(h, z, f" {node.id}", fontsize=8, color='blue', fontweight='bold', va='bottom')
+                        all_h.append(h)
+                        all_z.append(z)
+                        plotted_nodes.add(node.id)
 
         # Graficar Niveles
         if show_levels and hasattr(self.model, 'story_manager') and self.model.story_manager.stories:

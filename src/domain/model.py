@@ -102,30 +102,30 @@ class Model:
     
     def add_slab(self, exterior_pts, holes_pts, section, level, revit_id=None):
         """
-        Recibe la data cruda, la procesa a través del WallProcessor 
-        y agrega los sub-elementos resultantes al modelo.
+        Recibe la data cruda, la procesa a través de SlabProcessor manteniendo su geometría, 
+        y la agrega al modelo.
         """
-        # 1. Creamos un objeto temporal (Dummy) para que el procesador lo lea
-        temp_slab = SlabElement("TEMP", section, level, [], revit_id)
-        temp_slab.exterior_points = exterior_pts
-        temp_slab.holes_points = holes_pts
-
         #Verificamos que la losa sea horizontal (Z similar para todos los nodos)
-        maxz=max(node[2] for node in temp_slab.exterior_points) if temp_slab.exterior_points else 0
-        minz=min(node[2] for node in temp_slab.exterior_points) if temp_slab.exterior_points else 0
-        maxz_hole=max(pt[2] for outline in temp_slab.holes_points for pt in outline) if temp_slab.holes_points else maxz
-        minz_hole=min(pt[2] for outline in temp_slab.holes_points for pt in outline) if temp_slab.holes_points else minz
-        # 2. El procesador descompone la losa en rectángulos analíticos
-        # Importante: El SlabProcessor usará internamente model.node_manager
-        if abs(maxz-minz)<0.01 or abs(maxz_hole-minz_hole)<0.01:
-            new_elements = self.slab_processor.process_element(temp_slab)
-            for elem in new_elements:
-                self.slabs.append(elem)
-            return new_elements
-        else:
-            logger.error(f"La losa {revit_id} no es completament horizontal, se descarta")
+        #maxz=max(node[2] for node in exterior_pts) if exterior_pts else 0
+        #minz=min(node[2] for node in exterior_pts) if exterior_pts else 0
+        #maxz_hole=max(pt[2] for outline in holes_pts for pt in outline) if holes_pts else maxz
+        #minz_hole=min(pt[2] for outline in holes_pts for pt in outline) if holes_pts else minz
+        #if abs(maxz-minz)<0.01 or abs(maxz_hole-minz_hole)<0.01:
+        
+        slab_elem = self.slab_processor.process_slab(
+            exterior_pts, 
+            holes_pts, 
+            section, 
+            level, 
+            revit_id=revit_id,
+            side_min=0.1,
+            area_min=0.1
+        )
+        if slab_elem:
+            self.slabs.append(slab_elem)
+            return [slab_elem]
+        return []
 
-        # 3. Clasificamos y guardamos los resultados
 
     def add_section(self, type_sec,name,material,params):
         if type_sec == 'Frame' and name not in self.sections:

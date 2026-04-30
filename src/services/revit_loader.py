@@ -10,7 +10,7 @@ STORY_FILTER=None #["L1","L2"]#,"L3","L4","L5","L6","L7"]
 SECTION_FILTER=None#['WALL-MURO-20','WALL-MURO-15','FLOOR-FIA-LHA-20CM-COLOR','FLOOR-LOSA-15CM','WALL-MURO-20-COLOR','FLOOR-FIA-LHA-20CM','FLOOR-LOSA-15CM-GRIS'] #['WALL-BL-MURO-H-A-150MM','WALL-BL-MURO-H-A-200MM','WALL-BL-MURO-H-A-250MM','WALL-BL-MURO-H-A-300MM','WALL-BL-MURO-H-A-350MM','WALL-BL-MURO-H-A-400MM']
 CATEGORIES_FILTER=['walls','frames']
 THICKNESS_WALLS_FILTER=[0.15, 0.5] # ej. [0.2, 0.5]
-THICKNESS_SLABS_FILTER=[0.15, 0.2] # ej. [0.15, 0.3]
+THICKNESS_SLABS_FILTER=[0.15, 0.4] # ej. [0.15, 0.3]
 THICKNESS_FRAMES_FILTER=[0.15, 0.4] # ej. [0.2, 0.6]
 
 class RevitLoader:
@@ -181,14 +181,14 @@ class RevitLoader:
             dy = p2_y - p1_y
             
             angle_rad = math.atan2(dy, dx)
-            angle_deg = math.degrees(angle_rad) % 180
+            angle_deg = round(math.degrees(angle_rad), 0) % 180
             
             theta_rad = math.radians((angle_deg + 90) % 180)
             rho = p1_x * math.cos(theta_rad) + p1_y * math.sin(theta_rad)
             
             parsed_grids.append({
                 'name': name,
-                'angle_deg': round(angle_deg,0),
+                'angle_deg': angle_deg,
                 'rho': round(rho,2)
             })
             

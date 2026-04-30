@@ -1,6 +1,7 @@
 import logging
 from .grid import GridLine
 import numpy as np
+from .elements.frame import FrameElement
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,9 @@ class GridSystem:
             # Lógica solicitada para excedentes de la Z
             return f"Z{index - 25}"
 
+    def print_grids(self):
+        for grid in self.grids:
+            print(grid.label, grid.angle_deg, grid.rho)
 
 
 class GridManager:
@@ -131,19 +135,17 @@ class GridManager:
     def _is_grid_occupied(self, grid, elements, tolerance):
         """Verifica si algún elemento estructural yace sobre la grilla."""
         for e in elements:
-            # 1. El elemento debe tener el mismo ángulo (o paralelo)
-            ma=e.get_angle()
-            ga=grid.angle_deg
-            if abs(e.get_angle() - grid.angle_deg) < 0.1:
-                # 2. El elemento debe estar en el mismo rho
-                # Usamos el primer nodo del elemento para calcular su rho
-                pi = e.start_node
-                theta = np.radians((grid.angle_deg + 90) % 180)
-                rho_i = pi.x * np.cos(theta) + pi.y * np.sin(theta)
-                rho_g=grid.rho
+            is_vertical = isinstance(e, FrameElement) and abs(e.start_node.x - e.end_node.x) < 1e-3 and abs(e.start_node.y - e.end_node.y) < 1e-3
+            # Muros y vigas no verticales, columnas son verticales
+            # Notemos que en map_elements_to_grids is_vertical se define si la seccion es "Column" o similar,
+            # pero comprobamos las coordenadas también.
+            if hasattr(e, "section") and "Column" in str(e.section):
+                is_vertical = True
                 
-                if abs(rho_i - grid.rho) < tolerance:
-                    return True
+            ma = e.get_angle() if not is_vertical else None
+            
+            if self._is_on_grid(e, e.start_node, ma, is_vertical, grid, tolerance):
+                return True
         return False
     
     def rename_grids(self):

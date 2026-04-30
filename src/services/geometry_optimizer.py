@@ -80,6 +80,8 @@ class GeometryOptimizer:
 
     def _transform_grid_systems(self, dx, dy, alpha_deg):
         """Ajusta las grillas existentes a la nueva posición del modelo."""
+        alpha_rad = np.radians(alpha_deg)
+        c, s = np.cos(alpha_rad), np.sin(alpha_rad)
         for system in self.model.grid_manager.systems:
             for grid in system.grids:
                 # Rotar el ángulo maestro
@@ -87,6 +89,18 @@ class GeometryOptimizer:
                 # Ajustar rho para el nuevo sistema de coordenadas
                 theta_rad = np.radians((grid.angle_deg + 90) % 180)
                 grid.rho += dx * np.cos(theta_rad) + dy * np.sin(theta_rad)
+                
+                # Tambien desplazar p1 y p2 para que conserven la misma longitud y orientacion (vital para splits)
+                if hasattr(grid, 'p1') and grid.p1:
+                    new_x = grid.p1.x + dx
+                    new_y = grid.p1.y + dy
+                    grid.p1.x = new_x * c - new_y * s
+                    grid.p1.y = new_x * s + new_y * c
+                if hasattr(grid, 'p2') and grid.p2:
+                    new_x = grid.p2.x + dx
+                    new_y = grid.p2.y + dy
+                    grid.p2.x = new_x * c - new_y * s
+                    grid.p2.y = new_x * s + new_y * c
 
     def remove_orphan_nodes(self):
         """Elimina nodos que no están conectados a ningún elemento estructural."""
@@ -272,6 +286,8 @@ class GeometryOptimizer:
         # limpiando las referencias de los muros viejos o duplicados en otros ejes.
         self.model.grid_manager.map_elements_to_grids()
         
+        # Eliminar muros fantasma con longitud horizontal nula generados durante el proceso
+        self.remove_short_elements(min_length=0.01)
         logger.info(f"GeometryOptimizer: Se optimizaron los muros por eje geométrico. "
                     f"Muros originales procesados: {len(walls_to_remove)}, Muros resultantes generados: {len(new_walls_total)}.")
 
@@ -432,9 +448,11 @@ class GeometryOptimizer:
         self.model.node_manager.reindex()
         self.model.grid_manager.map_elements_to_grids()
         
+        # Eliminar elementos fantasma generados durante el proceso (altura y longitud minima)
+        self.remove_short_walls(min_height=0.01)
+        self.remove_short_elements(min_length=0.01)
         logger.info(f"GeometryOptimizer V2: Se optimizaron los muros horizontalmente aislados por piso. "
                     f"Muros cortados: {len(walls_to_remove)}, Muros resultantes: {len(new_walls_total)}.")
-
     def convert_short_beams_to_walls(self, max_ratio=4.0, z_dir=1):
         """
         Convierte vigas cortas en muros proyectando sus nodos.
@@ -721,15 +739,29 @@ class GeometryOptimizer:
                 continue
                 
             # Identificación de la directriz del eje 2D
-            ref_e = elements[0]
-            if hasattr(ref_e, 'start_node') and ref_e.start_node and ref_e.end_node:
-                n1, n2 = ref_e.start_node, ref_e.end_node
-            else:
-                continue
-
-            v_dir = np.array([n2.x - n1.x, n2.y - n1.y])
-            L_dir = np.linalg.norm(v_dir)
-            if L_dir < 1e-6:
+            ref_e = None
+            v_dir = None
+            L_dir = 0.0
+            n1, n2 = None, None
+            
+            for e in elements:
+                if hasattr(e, 'start_node') and e.start_node and e.end_node:
+                    tn1, tn2 = e.start_node, e.end_node
+                elif hasattr(e, 'nodes') and len(e.nodes) >= 2:
+                    tn1, tn2 = e.nodes[0], e.nodes[1]
+                else:
+                    continue
+                    
+                tv_dir = np.array([tn2.x - tn1.x, tn2.y - tn1.y])
+                tL_dir = np.linalg.norm(tv_dir)
+                if tL_dir > 1e-6:
+                    ref_e = e
+                    v_dir = tv_dir
+                    L_dir = tL_dir
+                    n1, n2 = tn1, tn2
+                    break
+                    
+            if not ref_e:
                 continue
             v_dir = v_dir / L_dir
             u_dir = np.array([-v_dir[1], v_dir[0]]) # Normal 2D
@@ -1001,6 +1033,9 @@ class GeometryOptimizer:
                 self.model.grid_manager.grid_elements_map[grid_label] = elem_actual
 
         self.model.node_manager.reindex()
+        # Eliminar muros y vigas fantasma de longitud/altura nula generados durante el proceso
+        self.remove_short_walls(min_height=0.01)
+        self.remove_short_elements(min_length=0.01)
         self.model.grid_manager.map_elements_to_grids()
         logger.info(f"GeometryOptimizer: Se completó la división por intersección de {split_count_beams} vigas y {split_count_walls} muros.")
 
@@ -1078,3 +1113,64 @@ class GeometryOptimizer:
             
         if invalid_walls:
             logger.info(f"CheckWalls: Se eliminaron {len(invalid_walls)} muros inválidos.")
+
+    def divide_slabs_by_holes(self):
+        """
+        Recorre todas las losas del modelo y las divide usando los vértices de sus perforaciones.
+        Utiliza el SlabProcessor para realizar la división y reemplazar las losas originales.
+        """
+        from services.slab_processor import SlabProcessor
+        
+        # Obtenemos las losas actuales (hacemos una copia de la lista porque el modelo va a modificarse durante la iteración)
+        current_slabs = list(self.model.slabs)
+        if not current_slabs:
+            return
+            
+        initial_count = len(current_slabs)
+        sp = SlabProcessor(self.model)
+        
+        # Aplicamos la división a cada losa. SlabProcessor se encarga internamente de eliminar la losa vieja y agregar las nuevas.
+        for slab in current_slabs:
+            if hasattr(slab, 'holes') and slab.holes:
+                sp.divide_slab_by_holes(slab)
+                
+        # Reindexamos los nodos para fusionar duplicados que puedan haber surgido y remapeamos grillas por si acaso
+        self.model.node_manager.reindex()
+        self.model.grid_manager.map_elements_to_grids()
+        
+        final_count = len(self.model.slabs)
+        if final_count > initial_count:
+            logger.info(f"GeometryOptimizer: Se dividieron las losas por perforaciones. "
+                        f"Losas originales: {initial_count}, Losas resultantes: {final_count}.")
+
+    def divide_slabs_by_geometry(self):
+        """
+        Recorre todas las losas del modelo y las divide en todo punto geométrico
+        utilizando el método process_element del SlabProcessor.
+        Reemplaza las losas originales con el conjunto de nuevas losas divididas.
+        """
+        from services.slab_processor import SlabProcessor
+        
+        current_slabs = list(self.model.slabs)
+        if not current_slabs:
+            return
+            
+        sp = SlabProcessor(self.model)
+        slabs_to_remove = set()
+        new_slabs_total = []
+        
+        for slab in current_slabs:
+            new_elements = sp.process_element(slab)
+            if new_elements:
+                new_slabs_total.extend(new_elements)
+                slabs_to_remove.add(slab)
+                
+        if slabs_to_remove:
+            self.model.slabs = [s for s in self.model.slabs if s not in slabs_to_remove]
+            self.model.slabs.extend(new_slabs_total)
+            
+            self.model.node_manager.reindex()
+            self.model.grid_manager.map_elements_to_grids()
+            
+            logger.info(f"GeometryOptimizer: Se dividieron las losas por geometría (process_element). "
+                        f"Losas originales procesadas: {len(slabs_to_remove)}, Losas resultantes: {len(new_slabs_total)}.")
