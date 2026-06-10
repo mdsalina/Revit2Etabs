@@ -732,7 +732,18 @@ class GeometryOptimizer:
                     for n in w.nodes:
                         if n is not None: nodos_validos_globales.add(n)
         else:
-            nodos_validos_globales = set(self.model.node_manager.nodes.values())
+            # Considerar nodos de muros, vigas y columnas, pero NO de losas
+            for w in self.model.walls:
+                if hasattr(w, 'nodes') and w.nodes:
+                    for n in w.nodes:
+                        if n is not None: nodos_validos_globales.add(n)
+            for b in self.model.beams:
+                if hasattr(b, 'start_node') and b.start_node: nodos_validos_globales.add(b.start_node)
+                if hasattr(b, 'end_node') and b.end_node: nodos_validos_globales.add(b.end_node)
+            for c in self.model.columns:
+                if hasattr(c, 'start_node') and c.start_node: nodos_validos_globales.add(c.start_node)
+                if hasattr(c, 'end_node') and c.end_node: nodos_validos_globales.add(c.end_node)
+                
 
         for grid_label, elements in self.model.grid_manager.grid_elements_map.items():
             if not elements:

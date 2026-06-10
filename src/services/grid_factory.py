@@ -51,16 +51,20 @@ class GridFactory:
             
             final_angle = median_angle
             
-            # Solo ejecutamos el snapping si el usuario entregó una lista
+            # Solo ejecutamos el snapping si el usuario entregó una lista. Se busca el ángulo canónico más cercano al promedio del grupo.
+            # Este ángulo será la dirección de la grilla
             if canonical_angles:
-                for can_ang in canonical_angles:
-                    diff = min(abs(median_angle - can_ang), 
-                               abs(median_angle - (can_ang + 180)), 
-                               abs(median_angle - (can_ang - 180)))
-                    
-                    if diff <= snap_threshold:
-                        final_angle = float(can_ang)
-                        break
+                best_can_ang = min(
+                    canonical_angles,
+                    key=lambda can: min(abs(median_angle - can),
+                                        abs(median_angle - (can + 180)),
+                                        abs(median_angle - (can - 180)))
+                )
+                best_diff = min(abs(median_angle - best_can_ang),
+                                abs(median_angle - (best_can_ang + 180)),
+                                abs(median_angle - (best_can_ang - 180)))
+                if best_diff <= snap_threshold:
+                    final_angle = float(best_can_ang)
             
             found_masters.append(round(final_angle,0))
 

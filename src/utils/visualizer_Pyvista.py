@@ -9,6 +9,23 @@ class StructuralVisualizerPyVista:
         self.plotter.set_background('white')
         self.node_cloud = None
 
+    def _ensure_ccw(self, nodes):
+        """Asegura que los nodos estén en sentido antihorario (CCW) en el plano XY sin alterar su adyacencia."""
+        if len(nodes) < 3:
+            return nodes
+        
+        # Fórmula de la zapatilla (Shoelace formula) para calcular el área signada en 2D (plano XY)
+        area_sum = 0.0
+        n = len(nodes)
+        for i in range(n):
+            p1 = nodes[i]
+            p2 = nodes[(i + 1) % n]
+            area_sum += (p1.x * p2.y) - (p2.x * p1.y)
+            
+        if area_sum < 0:
+            return list(reversed(nodes))
+        return nodes
+
     def plot_model(self, show_nodes=False, show_grids=False, show_ids=False):
         """Genera una vista 3D interactiva de la estructura usando PyVista."""
         self.plotter.add_text(f'Vista Previa Interactiva: {self.model.name}', font_size=12, color='black')
@@ -129,10 +146,13 @@ class StructuralVisualizerPyVista:
             slab_centers = []
             slab_ids = []
             for slab in self.model.slabs:
-                points = [[n.x, n.y, n.z] for n in slab.nodes]
+                sorted_nodes = self._ensure_ccw(slab.nodes)
+                points = [[n.x, n.y, n.z] for n in sorted_nodes]
                 face = [len(points)] + list(range(len(points)))
                 try:
                     poly = pv.PolyData(points, faces=face)
+                    if len(points) > 4:
+                        poly = poly.triangulate()
                     slab_polys.append(poly)
                 except Exception:
                     pass
@@ -436,12 +456,7 @@ class StructuralVisualizerPyVista:
                 if hasattr(slab, 'section') and hasattr(slab.section, 'thickness') and slab.section.thickness is not None:
                     thickness = slab.section.thickness
                     
-                cx = sum(n.x for n in slab.nodes) / n_nodes
-                cy = sum(n.y for n in slab.nodes) / n_nodes
-                
-                def get_angle_slab(n):
-                    return math.atan2(n.y - cy, n.x - cx)
-                sorted_nodes = sorted(slab.nodes, key=get_angle_slab)
+                sorted_nodes = self._ensure_ccw(slab.nodes)
                 pts = np.array([[n.x, n.y, n.z] for n in sorted_nodes])
                 
                 u = pts[1] - pts[0]
@@ -471,6 +486,7 @@ class StructuralVisualizerPyVista:
                 else:
                     face = [len(pts)] + list(range(len(pts)))
                     poly = pv.PolyData(pts, faces=face)
+                    poly = poly.triangulate()
                     poly.points -= (thickness/2)*n
                     try:
                         thick_poly = poly.extrude((thickness * n).tolist(), capping=True)

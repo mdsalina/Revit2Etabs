@@ -25,14 +25,17 @@ logger = setup_logger()
 #11. juan pineda
 #12. VM desde calculo más grillas
 #13. Juan_pineda_grids
+#14. Playa_Ligate
+#15. Hualtatas_VM
+#16. Lavandulas
 
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas','juan_pineda','VM_est_grid','Juan_pineda_grids']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas','juan_pineda','VM_est_grid','Juan_pineda_grids','Playa_Ligate','Hualtatas','Lavandulas']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
 SNAP_THRESHOLD=20 # Distancia angular máxima para que un elemento se considere parte de un ángulo canónico
-CANONICAL_ANGLES=[0,26,64,90,116,154] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
+CANONICAL_ANGLES=[0,90] # Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona,los ángulos detectados se "pegan" a estos valores.
 MAX_DISTANCE=0.3 # Tolerancia de distancia para agrupar nodos similares.
 LMIN=0.2 # Longitud mínima para elementos estructurales.
 DZ=1 # Desplazamiento vertical del modelo. Permite agregar 1m en piso base.
@@ -55,8 +58,13 @@ def run_pipeline():
     pyviz= StructuralVisualizerPyVista(modelo)
     etabs_model = EtabsWriter(modelo)
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[12]}.json")
+    loader.load_json(f"data/{test[13]}.json")
     
+    #print("----------------coords losa----------------")
+    #print(f'ext: {modelo.slabs[0].get_ext_coords()}')
+    #print(f'hole: {modelo.slabs[0].get_hole_coords()}')
+    #print(f'--------------------------------------------')
+
     logger.info("Propagando ángulos verticalmente...")
     modelo.node_manager.propagate_vertical_angles()
 
@@ -101,16 +109,16 @@ def run_pipeline():
     optimizer.remove_short_walls(min_height=LMIN*0.1)
     optimizer.remove_orphan_nodes()
 
-    #viz.plot_model(show_nodes=False,show_grids=True,show_ids=True)  #ploteo modelo completo
-    #pyviz.plot_model_pro(show_nodes=False,show_grids=True,show_ids=False)  #ploteo modelo completo
+    #viz.plot_model(show_nodes=True,show_grids=True,show_ids=True)  #ploteo modelo completo
+    pyviz.plot_model_pro(show_nodes=False,show_grids=True,show_ids=False)  #ploteo modelo completo
     #viz.plot_grid("A5", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
     #viz.plot_plan(level_id="L6", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
      
     # 3. Escribimos en ETABS
-    logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
-    logger.info("Iniciando modelación en ETABS...")
-    etabs_model.connect_active_etabs()
-    etabs_model.write_all()
+    #logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
+    #logger.info("Iniciando modelación en ETABS...")
+    #etabs_model.connect_active_etabs()
+    #etabs_model.write_all()
     
     logger.info("-- PROCESO FINALIZADO CON ÉXITO ---\n")
 

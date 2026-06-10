@@ -105,13 +105,35 @@ class Model:
         Recibe la data cruda, la procesa a través de SlabProcessor manteniendo su geometría, 
         y la agrega al modelo.
         """
-        #Verificamos que la losa sea horizontal (Z similar para todos los nodos)
-        #maxz=max(node[2] for node in exterior_pts) if exterior_pts else 0
-        #minz=min(node[2] for node in exterior_pts) if exterior_pts else 0
-        #maxz_hole=max(pt[2] for outline in holes_pts for pt in outline) if holes_pts else maxz
-        #minz_hole=min(pt[2] for outline in holes_pts for pt in outline) if holes_pts else minz
-        #if abs(maxz-minz)<0.01 or abs(maxz_hole-minz_hole)<0.01:
-        
+        #cada nodo de la la losa lo proyectamos al nivel más cercano del modelo
+        if self.story_manager.stories:
+            def project_point(pt):
+                x, y, z = pt[0], pt[1], pt[2]
+                closest_story = min(self.story_manager.stories, key=lambda s: abs(s.elevation - z))
+                if isinstance(pt, tuple):
+                    return (x, y, closest_story.elevation)
+                elif isinstance(pt, np.ndarray):
+                    return np.array([x, y, closest_story.elevation])
+                else:
+                    return [x, y, closest_story.elevation]
+            if exterior_pts:
+                exterior_pts = [project_point(pt) for pt in exterior_pts]
+            if holes_pts:
+                holes_pts = [[project_point(pt) for pt in outline] for outline in holes_pts]
+
+        # Verificar que todos los puntos (contorno y huecos) queden en la misma coordenada Z
+        z_coords = []
+        if exterior_pts:
+            z_coords.extend(pt[2] for pt in exterior_pts)
+        if holes_pts:
+            z_coords.extend(pt[2] for outline in holes_pts for pt in outline)
+
+        if z_coords:
+            first_z = z_coords[0]
+            if not all(abs(z - first_z) < 1e-5 for z in z_coords):
+                logger.warning(f"Losa {revit_id} omitida: sus nodos no tienen la misma coordenada Z (planicidad horizontal requerida).")
+                return []
+
         slab_elem = self.slab_processor.process_slab(
             exterior_pts, 
             holes_pts, 
@@ -125,7 +147,6 @@ class Model:
             self.slabs.append(slab_elem)
             return [slab_elem]
         return []
-
 
     def add_section(self, type_sec,name,material,params):
         if type_sec == 'Frame' and name not in self.sections:

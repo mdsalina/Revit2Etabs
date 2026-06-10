@@ -14,6 +14,15 @@ class SlabElement(StructuralElement):
     def get_geometry_summary(self):
         return f"Slab con {len(self.nodes)}"
 
+    def get_ext_coords(self):
+        return [(n.x, n.y, n.z) for n in self.nodes]
+    
+    def get_hole_coords(self):
+        hole_list={}
+        for i,hole in enumerate(self.holes):
+            hole_list[i]=[(n.x, n.y, n.z) for n in hole]
+        return hole_list    
+            
     def to_etabs_command(self, sap_model,espesor):
         """
         Genera el comando AddByCoord para ETABS.

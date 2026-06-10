@@ -3,6 +3,7 @@ from domain.elements.slab import SlabElement
 import logging
 import numpy as np
 from shapely.geometry import Polygon
+from shapely.geometry.polygon import orient as shapely_orient
 
 logger = logging.getLogger("Revit2Etabs.Services.SlabProcessor")
 
@@ -78,6 +79,9 @@ class SlabProcessor(BaseShellProcessor):
 
         # c) Simplificar el polígono para minimizar nodos
         poly = poly.simplify(0.005, preserve_topology=True)
+
+        # Ordenar nodos del exterior en sentido antihorario (CCW, signo positivo)
+        poly = shapely_orient(poly, sign=1.0)
 
         # b) Filtrar perforaciones por área y lado mínimo
         valid_holes = []
