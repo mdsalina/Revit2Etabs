@@ -165,7 +165,7 @@ def draw_sidebar():
         selected_categories = []
         for cat in ["walls", "frames", "slabs"]:
             # Usamos capitalize para mostrar, pero guardamos el nombre original en minúsculas
-            if st.checkbox(cat.capitalize(), value=True, key=f"cat_{cat}"):
+            if st.checkbox(cat.capitalize(), value=True, key=f"cat_{cat}", help="Categorías de Revit: ['walls','frames','slabs']"):
                 selected_categories.append(cat)
                 
     # Checklist de Niveles (Stories)
@@ -173,14 +173,14 @@ def draw_sidebar():
         selected_levels = []
         for lvl in metadata["levels"]:
             label = f"{lvl['name']} ({lvl['id']})"
-            if st.checkbox(label, value=True, key=f"lvl_{lvl['id']}"):
+            if st.checkbox(label, value=True, key=f"lvl_{lvl['id']}", help="Checkbox con los niveles que aparezcan en el json"):
                 selected_levels.append(lvl['id'])
                 
     # Checklist de Secciones
     with st.sidebar.expander("Secciones a incluir", expanded=False):
         selected_sections = []
         for sec in metadata["sections"]:
-            if st.checkbox(sec["code_name"], value=True, key=f"sec_{sec['code_name']}"):
+            if st.checkbox(sec["code_name"], value=True, key=f"sec_{sec['code_name']}", help="Checkbox con las secciones que aparezcan en el json"):
                 selected_sections.append(sec["code_name"])
                 
     # Sliders de Espesores
@@ -195,7 +195,8 @@ def draw_sidebar():
                                    min_value=float(w_min - 0.05), 
                                    max_value=float(w_max + 0.05), 
                                    value=(float(w_min), float(w_max)), 
-                                   step=0.01)
+                                   step=0.01,
+                                   help="Rango de espesor de muros a procesar")
     
     # Espesor Losas
     s_min, s_max = limits["slabs"]
@@ -206,7 +207,8 @@ def draw_sidebar():
                                    min_value=float(s_min - 0.05), 
                                    max_value=float(s_max + 0.05), 
                                    value=(float(s_min), float(s_max)), 
-                                   step=0.01)
+                                   step=0.01,
+                                   help="Rango de espesor de losas a procesar")
                                    
     # Espesor Frames
     f_min, f_max = limits["frames"]
@@ -217,32 +219,46 @@ def draw_sidebar():
                                     min_value=float(f_min - 0.05), 
                                     max_value=float(f_max + 0.05), 
                                     value=(float(f_min), float(f_max)), 
-                                    step=0.01)
+                                    step=0.01,
+                                    help="Rango de dimensiones para vigas/columnas a procesar")
                                     
     # 3. PARÁMETROS DEL PIPELINE
     st.sidebar.markdown("### 3. Parámetros de Optimización")
     
-    eps_angle = st.sidebar.slider("Tolerancia Angular (deg)", min_value=1, max_value=45, value=10)
-    eps_dist = st.sidebar.slider("Tolerancia Distancia Grilla (m)", min_value=0.05, max_value=1.0, value=0.15, step=0.01)
-    round_decimal = st.sidebar.number_input("Decimales Grilla (Redondeo)", min_value=0, max_value=4, value=2)
-    snap_threshold = st.sidebar.slider("Snap Threshold (deg)", min_value=5, max_value=45, value=20)
+    eps_angle = st.sidebar.slider("Tolerancia Angular (deg)", min_value=1, max_value=45, value=10, 
+                                  help="Tolerancia angular para agrupar elementos similares")
+    eps_dist = st.sidebar.slider("Tolerancia Distancia Grilla (m)", min_value=0.05, max_value=1.0, value=0.15, step=0.01,
+                                 help="Tolerancia de distancia para agrupar elementos similares")
+    round_decimal = st.sidebar.number_input("Decimales Grilla (Redondeo)", min_value=0, max_value=4, value=2,
+                                            help="Cantidad de decimales para redondear los valores de las grillas (2 por defecto = 1cm)")
+    snap_threshold = st.sidebar.slider("Snap Threshold (deg)", min_value=5, max_value=45, value=20,
+                                       help="Distancia angular máxima para que un elemento se considere parte de un ángulo canónico")
     
-    canonical_angles_str = st.sidebar.text_input("Ángulos Canónicos", value="0, 90")
+    canonical_angles_str = st.sidebar.text_input("Ángulos Canónicos", value="0, 90",
+                                                 help="Lista de ángulos fijos (ej. [0, 90, 45]). Si se proporciona, los ángulos detectados se 'pegan' a estos valores.")
     try:
         canonical_angles = [float(x.strip()) for x in canonical_angles_str.split(",") if x.strip()]
     except ValueError:
         canonical_angles = [0.0, 90.0]
         st.sidebar.warning("Formato inválido. Usando [0, 90]")
         
-    max_distance = st.sidebar.number_input("Max Distancia Agrupación Nodos (m)", min_value=0.05, max_value=1.0, value=0.3, step=0.05)
-    lmin = st.sidebar.number_input("Longitud Mínima Elementos (m)", min_value=0.05, max_value=1.0, value=0.2, step=0.05)
-    dz = st.sidebar.number_input("Desplazamiento Vertical DZ (m)", min_value=0.0, max_value=5.0, value=1.0, step=0.1)
-    dz_level = st.sidebar.number_input("Tolerancia Ajuste Nivel Z (m)", min_value=0.05, max_value=1.0, value=0.35, step=0.05)
+    max_distance = st.sidebar.number_input("Max Distancia Agrupación Nodos (m)", min_value=0.05, max_value=1.0, value=0.3, step=0.05,
+                                           help="Tolerancia de distancia para agrupar nodos similares.")
+    lmin = st.sidebar.number_input("Longitud Mínima Elementos (m)", min_value=0.05, max_value=1.0, value=0.2, step=0.05,
+                                  help="Longitud mínima para elementos estructurales.")
+    dz = st.sidebar.number_input("Desplazamiento Vertical DZ (m)", min_value=0.0, max_value=5.0, value=1.0, step=0.1,
+                                 help="Desplazamiento vertical del modelo. Permite agregar 1m en piso base.")
+    dz_level = st.sidebar.number_input("Tolerancia Ajuste Nivel Z (m)", min_value=0.05, max_value=1.0, value=0.35, step=0.05,
+                                       help="Tolerancia de distancia para ajustar la altura de los nodos a los niveles.")
     
-    beam_grid = st.sidebar.checkbox("Generar grilla para vigas", value=True)
-    divide_only_walls_by_intersection = st.sidebar.checkbox("Dividir muros por intersección de vigas", value=False)
-    keepg = st.sidebar.checkbox("Conservar grilla existente", value=True)
-    grid_tolerance = st.sidebar.number_input("Tolerancia Ajuste Grilla Existente (m)", min_value=0.05, max_value=2.0, value=0.5, step=0.05)
+    beam_grid = st.sidebar.checkbox("Generar grilla para vigas", value=True,
+                                    help="Si es True, se genera una grilla para vigas.")
+    divide_only_walls_by_intersection = st.sidebar.checkbox("Dividir muros por intersección de vigas", value=False,
+                                                             help="Si es True, se divide los muros por intersección de vigas.")
+    keepg = st.sidebar.checkbox("Conservar grilla existente", value=True,
+                                help="Si es True, se conserva la grilla existente.")
+    grid_tolerance = st.sidebar.number_input("Tolerancia Ajuste Grilla Existente (m)", min_value=0.05, max_value=2.0, value=0.5, step=0.05,
+                                             help="Tolerancia de distancia para ajustar una nueva grilla a una existente.")
 
     # Devolvemos un diccionario empaquetado con todas las configuraciones
     return {
