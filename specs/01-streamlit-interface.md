@@ -1,6 +1,6 @@
 # Spec: Interfaz Web Interactiva con Streamlit para Revit2Etabs
 
-* **Estado:** Aprobado
+* **Estado:** Implementado
 * **Fecha:** 2026-06-12
 * **Creado por:** Antigravity (AI Assistant)
 * **Dependencias:** Ninguna (Primera especificación)
