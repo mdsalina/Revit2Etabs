@@ -6,9 +6,9 @@ from services.load_filter import LoadFilter
 
 logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 
-STORY_FILTER=None #["L1","L2"]#["L1","L2","L3","L4","L5","L6","L7"]
-SECTION_FILTER=None#['WALL-MURO-20','WALL-MURO-15','FLOOR-FIA-LHA-20CM-COLOR','FLOOR-LOSA-15CM','WALL-MURO-20-COLOR','FLOOR-FIA-LHA-20CM','FLOOR-LOSA-15CM-GRIS'] #['WALL-BL-MURO-H-A-150MM','WALL-BL-MURO-H-A-200MM','WALL-BL-MURO-H-A-250MM','WALL-BL-MURO-H-A-300MM','WALL-BL-MURO-H-A-350MM','WALL-BL-MURO-H-A-400MM']
-CATEGORIES_FILTER=None #['walls','frames']
+STORY_FILTER=None #checkbox con los niveles que aparezcan en el json
+SECTION_FILTER=None#checkbox con las secciones que aparezcan en el json
+CATEGORIES_FILTER=None #opciones: con checkbox ['walls','frames','slabs']
 THICKNESS_WALLS_FILTER=[0.15, 0.5] # ej. [0.2, 0.5]
 THICKNESS_SLABS_FILTER=[0.15, 0.45] # ej. [0.15, 0.3]
 THICKNESS_FRAMES_FILTER=[0.15, 0.4] # ej. [0.2, 0.6]
