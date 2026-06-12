@@ -421,68 +421,23 @@ if __name__ == "__main__":
     config = draw_sidebar()
     
     if config:
-        # Estructura principal
-        col_main, col_logs = st.columns([2, 1])
+        # Estructura principal - A lo ancho de la ventana
+        st.subheader("Control del Pipeline")
+        btn_process = st.button("🚀 Ejecutar Pipeline de Optimización", use_container_width=True)
         
-        with col_main:
-            st.subheader("Control del Pipeline")
-            btn_process = st.button("🚀 Ejecutar Pipeline de Optimización", use_container_width=True)
+        btn_pyvista = False
+        btn_etabs = False
+        
+        # Mostrar panel de acciones externas si el modelo ya está procesado
+        if "processed_model" in st.session_state and st.session_state.processed_model is not None:
+            st.markdown("#### Acciones Externas")
+            col_pv, col_etabs = st.columns(2)
             
-            # Mostrar panel de acciones externas si el modelo ya está procesado
-            if "processed_model" in st.session_state and st.session_state.processed_model is not None:
-                st.markdown("#### Acciones Externas")
-                col_pv, col_etabs = st.columns(2)
-                
-                with col_pv:
-                    btn_pyvista = st.button("🥽 Abrir Vista 3D Real (PyVista)", use_container_width=True)
-                with col_etabs:
-                    btn_etabs = st.button("🏗️ Exportar a CSI ETABS", use_container_width=True)
-                    
-                if btn_pyvista:
-                    st.info("Abriendo ventana local interactiva de PyVista... (Cierra la ventana externa para continuar interactuando con la interfaz web)")
-                    try:
-                        from utils.visualizer_Pyvista import StructuralVisualizerPyVista
-                        pyviz = StructuralVisualizerPyVista(st.session_state.processed_model)
-                        pyviz.plot_model_pro(show_nodes=False, show_grids=True, show_ids=False)
-                        st.success("¡Visualizador 3D cerrado con éxito!")
-                    except Exception as e:
-                        st.error(f"Error al abrir PyVista: {e}")
-                        
-                if btn_etabs:
-                    with st.spinner("Conectando y exportando a CSI ETABS..."):
-                        logger_root = logging.getLogger("Revit2Etabs")
-                        streamlit_handler = StreamlitLogHandler(log_placeholder)
-                        logger_root.addHandler(streamlit_handler)
-                        try:
-                            from services.etabs_writer import EtabsWriter
-                            etabs_model = EtabsWriter(st.session_state.processed_model)
-                            logging.getLogger("Revit2Etabs.Main").info("Conectando con la interfaz activa de ETABS...")
-                            etabs_model.connect_active_etabs()
-                            logging.getLogger("Revit2Etabs.Main").info("Iniciando escritura de elementos...")
-                            etabs_model.write_all()
-                            st.success("¡Modelo exportado a CSI ETABS con éxito!")
-                        except Exception as e:
-                            st.error(f"Error al exportar a ETABS: {e}")
-                            logging.getLogger("Revit2Etabs.Main").error(f"Fallo en la exportación: {e}", exc_info=True)
-                        finally:
-                            logger_root.removeHandler(streamlit_handler)
-            
-        with col_logs:
-            st.subheader("Bitácora de Ejecución (Logs)")
-            log_placeholder = st.empty()
-            if "log_output" in st.session_state and st.session_state.log_output:
-                log_placeholder.code("\n".join(st.session_state.log_output[-50:]))
-            else:
-                log_placeholder.info("Los logs aparecerán aquí al ejecutar el pipeline.")
-                
-        if btn_process:
-            with st.spinner("Procesando modelo geométrico..."):
-                modelo_procesado = run_pipeline_logic(config, log_placeholder)
-                if modelo_procesado:
-                    st.session_state.processed_model = modelo_procesado
-                    st.success("¡Modelo procesado y optimizado con éxito!")
-                    st.rerun()
-                    
+            with col_pv:
+                btn_pyvista = st.button("🥽 Abrir Vista 3D Real (PyVista)", use_container_width=True)
+            with col_etabs:
+                btn_etabs = st.button("🏗️ Exportar a CSI ETABS", use_container_width=True)
+
         # Visualizaciones del modelo procesado
         if "processed_model" in st.session_state and st.session_state.processed_model is not None:
             st.write("---")
@@ -600,5 +555,50 @@ if __name__ == "__main__":
                 else:
                     st.info("No se han detectado ni generado ejes de grilla en el modelo.")
 
+        # Sección de logs al final del todo, ocupando el ancho completo de la ventana
+        st.write("---")
+        st.subheader("Bitácora de Ejecución (Logs)")
+        log_placeholder = st.empty()
+        
+        if "log_output" in st.session_state and st.session_state.log_output:
+            log_placeholder.code("\n".join(st.session_state.log_output[-50:]))
+        else:
+            log_placeholder.info("Los logs aparecerán aquí al ejecutar el pipeline o exportar a ETABS.")
 
+        # Lógica de clicks
+        if btn_process:
+            with st.spinner("Procesando modelo geométrico..."):
+                modelo_procesado = run_pipeline_logic(config, log_placeholder)
+                if modelo_procesado:
+                    st.session_state.processed_model = modelo_procesado
+                    st.success("¡Modelo procesado y optimizado con éxito!")
+                    st.rerun()
 
+        if btn_pyvista:
+            st.info("Abriendo ventana local interactiva de PyVista... (Cierra la ventana externa para continuar interactuando con la interfaz web)")
+            try:
+                from utils.visualizer_Pyvista import StructuralVisualizerPyVista
+                pyviz = StructuralVisualizerPyVista(st.session_state.processed_model)
+                pyviz.plot_model_pro(show_nodes=False, show_grids=True, show_ids=False)
+                st.success("¡Visualizador 3D cerrado con éxito!")
+            except Exception as e:
+                st.error(f"Error al abrir PyVista: {e}")
+                
+        if btn_etabs:
+            with st.spinner("Conectando y exportando a CSI ETABS..."):
+                logger_root = logging.getLogger("Revit2Etabs")
+                streamlit_handler = StreamlitLogHandler(log_placeholder)
+                logger_root.addHandler(streamlit_handler)
+                try:
+                    from services.etabs_writer import EtabsWriter
+                    etabs_model = EtabsWriter(st.session_state.processed_model)
+                    logging.getLogger("Revit2Etabs.Main").info("Conectando con la interfaz activa de ETABS...")
+                    etabs_model.connect_active_etabs()
+                    logging.getLogger("Revit2Etabs.Main").info("Iniciando escritura de elementos...")
+                    etabs_model.write_all()
+                    st.success("¡Modelo exportado a CSI ETABS con éxito!")
+                except Exception as e:
+                    st.error(f"Error al exportar a ETABS: {e}")
+                    logging.getLogger("Revit2Etabs.Main").error(f"Fallo en la exportación: {e}", exc_info=True)
+                finally:
+                    logger_root.removeHandler(streamlit_handler)
