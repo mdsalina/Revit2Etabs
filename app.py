@@ -1,6 +1,8 @@
 # app.py
 import sys
+import os
 from pathlib import Path
+
 # Asegurar que la carpeta src esté en sys.path al inicio para resolver las dependencias
 sys_path_src = str(Path(__file__).parent / "src")
 if sys_path_src not in sys.path:
@@ -15,11 +17,20 @@ from utils.logger_config import setup_logger
 if not logging.getLogger("Revit2Etabs").handlers:
     setup_logger()
 
+# Resolver ruta de recursos de forma compatible con empaquetado PyInstaller
+def get_resource_path(relative_path):
+    if getattr(sys, "frozen", False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+logo_path = get_resource_path("src/icon/logo_R2E.ico")
 
 # Configuración básica de Streamlit
 st.set_page_config(
     page_title="Revit2Etabs - Interfaz Web",
-    page_icon="🏗️",
+    page_icon=logo_path if os.path.exists(logo_path) else "🏗️",
     layout="wide"
 )
 
@@ -147,11 +158,12 @@ def draw_sidebar():
                     selected_file = file_choice
                 except Exception as e:
                     st.sidebar.error(f"Error al leer {file_choice}: {e}")
-        else:
-            st.sidebar.warning("No se encontraron archivos JSON en data/ y no se ha subido ningún archivo.")
             
     if "raw_json_data" not in st.session_state or st.session_state.raw_json_data is None:
-        st.warning("Por favor, selecciona o sube un archivo JSON para comenzar.")
+        if json_files:
+            st.warning("Por favor, selecciona o sube un archivo JSON para comenzar.")
+        else:
+            st.warning("Por favor, sube un archivo JSON para comenzar.")
         return None
         
     # Extraer metadatos del JSON cargado
