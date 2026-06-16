@@ -7,6 +7,8 @@ from services.geometry_optimizer import GeometryOptimizer
 from utils.visualizer import StructuralVisualizer
 from utils.visualizer_Pyvista import StructuralVisualizerPyVista
 from services.grid_factory import GridFactory
+import json
+import json
 
 # Inicializamos el logger globalmente al inicio
 logger = setup_logger()
@@ -28,9 +30,11 @@ logger = setup_logger()
 #14. Playa_Ligate
 #15. Hualtatas_VM
 #16. Lavandulas
+#17. Exportacion web
+#18. Juan_pineda_grids_web
 
 
-test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas','juan_pineda','VM_est_grid','Juan_pineda_grids','Playa_Ligate','Hualtatas','Lavandulas']
+test=['modelo_revit','muros_orificios','modelo_losa_muro_viga','structural_export','VM','VM_calculo','VM_Arq','VM_Arq_3','Casa_BN_V2','las_lilas','hualtatas','juan_pineda','VM_est_grid','Juan_pineda_grids','Playa_Ligate','Hualtatas','Lavandulas','VM_exportacion_web','Juan_pineda_grids_web']
 EPS_ANGLE=10 # Tolerancia angular para agrupar elementos similares
 EPS_DIST=0.15 # Tolerancia de distancia para agrupar elementos similares
 ROUND_DECIMAL=2 # Cantidad de decimales para redondear los valores de las grillas (2 por defecto=1cm)
@@ -58,7 +62,7 @@ def run_pipeline():
     pyviz= StructuralVisualizerPyVista(modelo)
     etabs_model = EtabsWriter(modelo)
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[13]}.json")
+    loader.load_json(f"data/{test[18]}.json")
     
     #print("----------------coords losa----------------")
     #print(f'ext: {modelo.slabs[0].get_ext_coords()}')
@@ -111,12 +115,15 @@ def run_pipeline():
 
     #viz.plot_model(show_nodes=True,show_grids=True,show_ids=True)  #ploteo modelo completo
     pyviz.plot_model_pro(show_nodes=False,show_grids=True,show_ids=False)  #ploteo modelo completo
+    jsonModelo=modelo.to_json_dict()
+    with open(f"data/{test[18]}_out.json", "w", encoding="utf-8") as f:
+        json.dump(jsonModelo, f, indent=4, ensure_ascii=False)
     #viz.plot_grid("A5", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
     #viz.plot_plan(level_id="L6", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica
      
     # 3. Escribimos en ETABS
-    #logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
-    #logger.info("Iniciando modelación en ETABS...")
+    logger.info(f"Resumen del modelo final: {modelo.get_summary()}")
+    logger.info("Iniciando modelación en ETABS...")
     #etabs_model.connect_active_etabs()
     #etabs_model.write_all()
     

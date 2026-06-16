@@ -21,10 +21,18 @@ datas += [
     (str(streamlit_dir / 'runtime'), 'streamlit/runtime'),
 ]
 
-# Recopilar todos los submódulos de streamlit
-hiddenimports = collect_submodules('streamlit')
+# Recopilar todos los submódulos de streamlit y dependencias críticas
+hiddenimports = (
+    collect_submodules('streamlit') +
+    collect_submodules('shapely') +
+    collect_submodules('sklearn') +
+    collect_submodules('matplotlib') +
+    collect_submodules('pyvista') +
+    collect_submodules('comtypes') +
+    collect_submodules('numpy')
+)
 
-# Añadir importaciones ocultas para las otras dependencias críticas (como VTK para pyvista, shapely, etc.)
+# Añadir importaciones ocultas para las otras dependencias críticas (como VTK para pyvista)
 hiddenimports += [
     "vtkmodules",
     "vtkmodules.all",
@@ -32,12 +40,6 @@ hiddenimports += [
     "vtkmodules.util",
     "vtkmodules.util.numpy_support",
     "vtkmodules.numpy_interface.dataset_adapter",
-    "shapely",
-    "sklearn",
-    "matplotlib",
-    "pyvista",
-    "pandas",
-    "comtypes",
 ]
 
 a = Analysis(
@@ -49,7 +51,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["pandas"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -65,7 +67,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='Revit2Etabs',
+    name='Revit2Etabs_v2',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

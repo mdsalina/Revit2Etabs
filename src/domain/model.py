@@ -236,4 +236,152 @@ class Model:
             summary = df
 
         return summary
+    
+    def to_json_dict(self):
+        """Devuelve un diccionario con la representación del modelo en formato JSON."""
+        json_dict = {
+            "project_info": {
+                "name": getattr(self, 'name', "S/N"),
+                "unit_system": getattr(self, 'internal_unit', "m"),
+                "discipline": "structural"
+            },
+            "levels": [],
+            "materials": [],
+            "grids": [],
+            "sections": [],
+            "elements": {
+                "beams": [],
+                "columns": [],
+                "walls": [],
+                "slabs": []
+            }
+        }
+        
+        # 1. Niveles (stories)
+        if hasattr(self, 'story_manager'):
+            for story in self.story_manager.stories:
+                json_dict["levels"].append({
+                    "elevation": round(story.elevation, 3),
+                    "name": story.name,
+                    "id": story.id
+                })
+                
+        # 2. Materiales
+        if hasattr(self, 'materials'):
+            for mat_name, mat in self.materials.items():
+                params = {}
+                if mat.type == 'Concrete' or mat.type == 'Steel':
+                    if hasattr(mat, 'fc') and mat.fc is not None: params['fc'] = mat.fc
+                    if hasattr(mat, 'fy') and mat.fy is not None: params['fy'] = mat.fy
+                    if hasattr(mat, 'e') and mat.e is not None: params['e'] = mat.e
+                    if hasattr(mat, 'v') and mat.v is not None: params['v'] = mat.v
+                    if hasattr(mat, 'unit_weight') and mat.unit_weight is not None: params['density'] = mat.unit_weight
+                    
+                json_dict["materials"].append({
+                    "name": mat.name,
+                    "type": mat.type,
+                    "parameters": params
+                })
+                
+        # 3. Grillas
+        if hasattr(self, 'grid_manager') and hasattr(self, 'node_manager'):
+            nodes = list(self.node_manager.nodes.values())
+            if nodes:
+                min_x = min(n.x for n in nodes)
+                max_x = max(n.x for n in nodes)
+                min_y = min(n.y for n in nodes)
+                max_y = max(n.y for n in nodes)
+            else:
+                min_x, max_x, min_y, max_y = -10, 10, -10, 10
+                
+            bbox = (min_x, max_x, min_y, max_y)
+            for grid in self.grid_manager.get_all_grids():
+                start, end = grid.get_endpoints(bbox)
+                json_dict["grids"].append({
+                    "name": grid.label,
+                    "p1": [round(start[0], 3), round(start[1], 3)],
+                    "p2": [round(end[0], 3), round(end[1], 3)]
+                })
+
+        # 4. Secciones
+        if hasattr(self, 'sections'):
+            for name, sec in self.sections.items():
+                params = {}
+                if sec.type_name == 'Frame':
+                    params['width'] = getattr(sec, 'width', 0)
+                    params['height'] = getattr(sec, 'height', 0)
+                elif sec.type_name in ('Wall', 'Slab'):
+                    params['thickness'] = getattr(sec, 'thickness', 0)
+                    
+                json_dict["sections"].append({
+                    "code_name": name,
+                    "type": sec.type_name,
+                    "material": getattr(sec, 'material_name', "Unknown"),
+                    "parameters": params
+                })
+
+        # 5. Elementos - Vigas
+        if hasattr(self, 'beams'):
+            for beam in self.beams:
+                json_dict["elements"]["beams"].append({
+                    "revit_id": getattr(beam, 'revit_id', None),
+                    "level": getattr(beam, 'level', None),
+                    "section": getattr(beam, 'section', None),
+                    "location": {
+                        "start": [round(beam.start_node.x, 3), round(beam.start_node.y, 3), round(beam.start_node.z, 3)],
+                        "end": [round(beam.end_node.x, 3), round(beam.end_node.y, 3), round(beam.end_node.z, 3)]
+                    }
+                })
+
+        # 5. Elementos - Columnas
+        if hasattr(self, 'columns'):
+            for col in self.columns:
+                json_dict["elements"]["columns"].append({
+                    "revit_id": getattr(col, 'revit_id', None),
+                    "level": getattr(col, 'level', None),
+                    "section": getattr(col, 'section', None),
+                    "location": {
+                        "start": [round(col.start_node.x, 3), round(col.start_node.y, 3), round(col.start_node.z, 3)],
+                        "end": [round(col.end_node.x, 3), round(col.end_node.y, 3), round(col.end_node.z, 3)]
+                    }
+                })
+
+        # 5. Elementos - Muros
+        if hasattr(self, 'walls'):
+            for wall in self.walls:
+                outline = [[round(n.x, 3), round(n.y, 3), round(n.z, 3)] for n in wall.nodes]
+                z_coords = [n.z for n in wall.nodes]
+                height = round(max(z_coords) - min(z_coords), 3) if z_coords else 0.0
+                
+                json_dict["elements"]["walls"].append({
+                    "revit_id": getattr(wall, 'revit_id', None),
+                    "level": getattr(wall, 'level', None),
+                    "section": getattr(wall, 'section', None),
+                    "location": {
+                        "outline": outline,
+                        "openings": [],
+                        "height": height
+                    }
+                })
+
+        # 5. Elementos - Losas
+        if hasattr(self, 'slabs'):
+            for slab in self.slabs:
+                outline = [[round(n.x, 3), round(n.y, 3), round(n.z, 3)] for n in slab.nodes]
+                openings = []
+                if hasattr(slab, 'get_hole_coords'):
+                    for i, hole_coords in slab.get_hole_coords().items():
+                        openings.append({"outline": [[round(x, 3), round(y, 3), round(z, 3)] for x, y, z in hole_coords]})
+                        
+                json_dict["elements"]["slabs"].append({
+                    "revit_id": getattr(slab, 'revit_id', None),
+                    "level": getattr(slab, 'level', None),
+                    "section": getattr(slab, 'section', None),
+                    "location": {
+                        "outline": outline,
+                        "openings": openings
+                    }
+                })
+
+        return json_dict
    

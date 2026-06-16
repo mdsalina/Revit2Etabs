@@ -107,11 +107,11 @@ class StoryManager:
         # Añadimos una tolerancia de 1cm (0.01m) para evitar errores de precisión
         for story in sorted_stories:
             if z_coord <= story.elevation + 0.01:
-                return story.name
+                return story.id
 
         # 2. Caso borde: Si la cota está por encima del último nivel (ej. un pretil)
         # se asigna al último nivel disponible.
-        return sorted_stories[-1].name
+        return sorted_stories[-1].id
 
     def to_etabs_commands(self,etabs_model):
         """

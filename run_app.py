@@ -14,13 +14,6 @@ if getattr(sys, "frozen", False):
 
 # Importaciones para que PyInstaller detecte todas las dependencias
 import streamlit.web.bootstrap
-import matplotlib
-import numpy
-import pandas
-import pyvista
-import sklearn
-import shapely
-import comtypes
 
 # Importación ficticia para forzar el rastreo automático de los módulos de la aplicación y la carpeta 'src'
 if False:

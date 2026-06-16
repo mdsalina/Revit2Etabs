@@ -1,6 +1,4 @@
 import numpy as np
-from sklearn.cluster import DBSCAN
-import numpy as np
 import logging
 import string
 
@@ -37,6 +35,7 @@ class GridFactory:
                 dist_matrix[j, i] = d
         
         min_samples=int(len(elements)*0.05) #al menos el 5% de los elementos deben tener el mismo ángulo para ser considerados como un ángulo maestro
+        from sklearn.cluster import DBSCAN
         db = DBSCAN(eps=eps_deg, min_samples=min_samples, metric='precomputed').fit(dist_matrix) #agrupa los ángulos que están a una distancia menor a eps_deg y les pone etiqueta
         
         found_masters = []
@@ -126,6 +125,7 @@ class GridFactory:
 
     def _cluster_rhos(self, rhos, eps):
         X = np.array(rhos).reshape(-1, 1)
+        from sklearn.cluster import DBSCAN
         db = DBSCAN(eps=eps, min_samples=1).fit(X)
         return [np.mean(X[db.labels_ == l]) for l in set(db.labels_)]
 

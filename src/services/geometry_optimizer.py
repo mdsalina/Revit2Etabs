@@ -453,6 +453,7 @@ class GeometryOptimizer:
         self.remove_short_elements(min_length=0.01)
         logger.info(f"GeometryOptimizer V2: Se optimizaron los muros horizontalmente aislados por piso. "
                     f"Muros cortados: {len(walls_to_remove)}, Muros resultantes: {len(new_walls_total)}.")
+    
     def convert_short_beams_to_walls(self, max_ratio=4.0, z_dir=1):
         """
         Convierte vigas cortas en muros proyectando sus nodos.
