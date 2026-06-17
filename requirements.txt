@@ -6,3 +6,6 @@ pyvista==0.47.3
 scikit-learn==1.8.0
 shapely==2.1.2
 streamlit
+fastapi
+pydantic
+uvicorn

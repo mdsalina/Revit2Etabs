@@ -62,7 +62,7 @@ def run_pipeline():
     pyviz= StructuralVisualizerPyVista(modelo)
     etabs_model = EtabsWriter(modelo)
     logger.info("Cargando datos...")
-    loader.load_json(f"data/{test[18]}.json")
+    loader.load_json(f"data/{test[17]}.json")
     
     #print("----------------coords losa----------------")
     #print(f'ext: {modelo.slabs[0].get_ext_coords()}')
@@ -116,7 +116,7 @@ def run_pipeline():
     #viz.plot_model(show_nodes=True,show_grids=True,show_ids=True)  #ploteo modelo completo
     pyviz.plot_model_pro(show_nodes=False,show_grids=True,show_ids=False)  #ploteo modelo completo
     jsonModelo=modelo.to_json_dict()
-    with open(f"data/{test[18]}_out.json", "w", encoding="utf-8") as f:
+    with open(f"data/{test[17]}_out.json", "w", encoding="utf-8") as f:
         json.dump(jsonModelo, f, indent=4, ensure_ascii=False)
     #viz.plot_grid("A5", show_nodes=True, show_grids=True, show_levels=True, show_ids=True) #ploteo grilla específica
     #viz.plot_plan(level_id="L6", show_nodes=True, show_grids=True, show_slab=False, show_ids=True) #ploteo planta específica

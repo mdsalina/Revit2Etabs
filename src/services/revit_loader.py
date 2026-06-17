@@ -9,9 +9,9 @@ logger = logging.getLogger("Revit2Etabs.Service.RevitLoader")
 STORY_FILTER=None #checkbox con los niveles que aparezcan en el json
 SECTION_FILTER=None#checkbox con las secciones que aparezcan en el json
 CATEGORIES_FILTER=None #opciones: con checkbox ['walls','frames','slabs']
-THICKNESS_WALLS_FILTER=[0.15, 0.5] # ej. [0.2, 0.5]
-THICKNESS_SLABS_FILTER=[0.15, 0.45] # ej. [0.15, 0.3]
-THICKNESS_FRAMES_FILTER=[0.15, 0.4] # ej. [0.2, 0.6]
+THICKNESS_WALLS_FILTER=None #[0.15, 0.5] # ej. [0.2, 0.5]
+THICKNESS_SLABS_FILTER=None #[0.15, 0.45] # ej. [0.15, 0.3]
+THICKNESS_FRAMES_FILTER=None #[0.15, 0.4] # ej. [0.2, 0.6]
 
 class RevitLoader:
     UNIT_FACTORS = {
@@ -37,17 +37,21 @@ class RevitLoader:
         )
         self.dz = 0.0 # Desplazamiento vertical acumulado
 
-    def load_json(self, file_path):
+    def load_json(self, file_path_or_data):
         """
-        Punto de entrada principal para cargar el archivo.
+        Punto de entrada principal para cargar el archivo o diccionario de datos.
         """
-        logger.info(f"Iniciando carga de archivo: {file_path}")
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"No se encontró el archivo: {file_path}")
+        if isinstance(file_path_or_data, dict):
+            logger.info("Cargando data directamente desde diccionario en memoria.")
+            data = file_path_or_data
+        else:
+            logger.info(f"Iniciando carga de archivo: {file_path_or_data}")
+            path = Path(file_path_or_data)
+            if not path.exists():
+                raise FileNotFoundError(f"No se encontró el archivo: {file_path_or_data}")
 
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
 
         logger.info(f"Nombre del modelo: {data.get('project_info', {}).get('name', 'S/N')}")
         
