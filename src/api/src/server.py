@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
-from api_entrypoint import procesar_geometria_backend
+from api_entrypoint import procesar_geometria_backend_Etabs
 
 app = FastAPI(title="Revit2Etabs API")
 
@@ -23,7 +23,7 @@ class ProcesaGeometriaRequest(BaseModel):
 @app.post("/procesar")
 def procesar_geometria(request: ProcesaGeometriaRequest):
     try:
-        resultado = procesar_geometria_backend(request.revit_json_data, request.params)
+        resultado = procesar_geometria_backend_Etabs(request.revit_json_data, request.params)
         return resultado
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
